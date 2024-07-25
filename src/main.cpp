@@ -1,4 +1,5 @@
 #include "../include/lexer.h"
+#include "../include/parser.h"
 
 #include <memory>
 #include <fcntl.h>
@@ -36,7 +37,7 @@ int main (int argc, char *argv[]) {
               (double)(end.tv_nsec - start.tv_nsec);
 
     std::cout << "Elapsed time: " << t_ns << " ns" << std::endl;
-    std::cout << "---------------------------------- Lexical Analysis ----------------------------------" << std::endl;
+    std::cout << "---------------------------------- Lexical analysis ----------------------------------" << std::endl;
 
     clock_gettime(CLOCK_REALTIME, &start);
 
@@ -50,6 +51,21 @@ int main (int argc, char *argv[]) {
     std::cout << "Elapsed time: " << t_ns << " ns" << std::endl;
 
     lexer->print_tokens();
+    std::cout << "---------------------------------- Syntactic analysis ----------------------------------" << std::endl;
+
+    clock_gettime(CLOCK_REALTIME, &start);
+    std::unique_ptr<cParser> parser = std::make_unique<cParser>(lexer->get_tokens());
+
+    parser->parse();
+
+    clock_gettime(CLOCK_REALTIME, &end);
+
+    t_ns = (double)(end.tv_sec - start.tv_sec) * 1.0e9 +
+              (double)(end.tv_nsec - start.tv_nsec);
+
+    std::cout << "Elapsed time: " << t_ns << " ns" << std::endl;
+
+    
 
     return 0;
 }

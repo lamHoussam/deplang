@@ -143,11 +143,6 @@ char cLexer::peek_char() const {
     return this->m_input_str[this->m_current_pos];
 }
 
-
-const std::vector<sToken>& cLexer::get_tokens() {
-    return this->m_tokens;
-}
-
 void cLexer::lex() {
     sToken token;
     do {

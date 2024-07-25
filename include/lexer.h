@@ -27,7 +27,7 @@ enum eTokenType {
     TOK_RIGHTCURBRACE = -12,
 };
 
-inline std::string get_token_type_string(eTokenType token_type);
+std::string get_token_type_string(eTokenType token_type);
 
 struct sToken {
     eTokenType token_type;   
@@ -43,6 +43,7 @@ public:
     inline char consume_char();
     inline char peek_char() const;
     void print_tokens() const;
+    const std::vector<sToken>& get_tokens();
 
     ~cLexer() = default;
 private:
