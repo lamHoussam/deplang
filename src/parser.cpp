@@ -10,6 +10,9 @@
 *
 */
 
+
+// @TODO: Implement Error management
+
 sToken cParser::get_next_token() {
     return this->m_current_token = this->m_tokens[this->m_current_index++];
 }
@@ -96,24 +99,26 @@ std::unique_ptr<ExprAST> cParser::parse_expression() {
 
 
 // @TODO: Change return type
-std::string cParser::parse_function_parameter() {
+std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
     this->get_next_token();
     if (this->m_current_token.token_type != TOK_IDENTIFIER) {
         // Error
         std::cerr << "Expected Identifier" << std::endl;
-        return "";
+        return nullptr;
     }
     std::string param_name = this->m_current_token.value;
     this->get_next_token();
+    
     // std::cout << "Param: " << param_name << "; Type: " << this->m_current_token.value << std::endl;
     if (this->m_current_token.token_type != TOK_IDENTIFIER) {
         // Error
         std::cerr << "Expected Identifier (type)" << std::endl;
-        return "";
+        return nullptr;
     }
-    return param_name;
-}
+    std::string param_type = this->m_current_token.value;
 
+    return std::make_unique<FunctionParameterAST>(param_name, param_type);
+}
 
 // Parse function definition
 // func identifier(arg1, arg2, ...) {
@@ -135,11 +140,11 @@ std::unique_ptr<ExprAST> cParser::parse_function_definition() {
         return nullptr;
     }
 
-    std::vector<std::string> args;
+    std::vector<std::unique_ptr<FunctionParameterAST>> args;
     if (this->m_current_token.token_type != TOK_RIGHTPAR) {
         while (true) {
-            std::string param = this->parse_function_parameter();
-            args.push_back(param);
+            auto param = this->parse_function_parameter();
+            args.push_back(std::move(param));
             // std::cout << "Got param: " << param << std::endl;
             this->get_next_token();
 
@@ -151,8 +156,6 @@ std::unique_ptr<ExprAST> cParser::parse_function_definition() {
                 std::cerr << "Expected , or )" << std::endl;
                 return nullptr;
             }
-
-            // this->get_next_token();
         }
     }
 
@@ -160,8 +163,10 @@ std::unique_ptr<ExprAST> cParser::parse_function_definition() {
     std::cout << "Function name: " << function_name << std::endl;
     std::cout << "Args: " << std::endl;
 
-    for (auto arg : args)
-        std::cout << arg << ", ";
+    for (auto& arg: args) {
+        std::cout << "Name: " << arg->get_param_name();
+        std::cout << "; Type: " << arg->get_param_type() << std::endl;
+    }
 
     std::cout << std::endl << "End Function" << std::endl;
     return nullptr;

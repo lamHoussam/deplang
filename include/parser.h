@@ -41,6 +41,17 @@ private:
     std::unique_ptr<ExprAST> m_lhs, m_rhs;
 };
 
+class FunctionParameterAST {
+public:
+   FunctionParameterAST(const std::string& param_name, const std::string& param_type): m_param_name(param_name), m_param_type(param_type) {}
+
+    inline const std::string& get_param_name() { return m_param_name; }
+    inline const std::string& get_param_type() { return m_param_type; }
+
+private:
+    std::string m_param_name, m_param_type;
+};
+
 
 // Callee([args])
 class CallExprAST : public ExprAST {
@@ -91,7 +102,7 @@ public:
     std::unique_ptr<ExprAST> parse_identifier_expr();
     std::unique_ptr<ExprAST> parse_primary();
 
-    std::string parse_function_parameter();
+    std::unique_ptr<FunctionParameterAST> parse_function_parameter();
     std::unique_ptr<ExprAST> parse_function_definition();
 
     void parse();
