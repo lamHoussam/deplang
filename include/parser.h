@@ -52,6 +52,18 @@ private:
     std::string m_param_name, m_param_type;
 };
 
+class FunctionDefinitionAST {
+public: 
+    FunctionDefinitionAST(const std::string& function_name, std::vector<std::unique_ptr<FunctionParameterAST>> parameters, std::unique_ptr<ExprAST> function_body) : m_function_name(function_name), m_parameters(std::move(parameters)), m_function_body(std::move(function_body)) {}
+
+    inline const std::string& get_function_name() { return m_function_name; }
+
+private:
+    std::string m_function_name;
+    std::vector<std::unique_ptr<FunctionParameterAST>> m_parameters;
+    std::unique_ptr<ExprAST> m_function_body;
+};
+
 
 // Callee([args])
 class CallExprAST : public ExprAST {
@@ -103,7 +115,7 @@ public:
     std::unique_ptr<ExprAST> parse_primary();
 
     std::unique_ptr<FunctionParameterAST> parse_function_parameter();
-    std::unique_ptr<ExprAST> parse_function_definition();
+    std::unique_ptr<FunctionDefinitionAST> parse_function_definition();
 
     void parse();
 

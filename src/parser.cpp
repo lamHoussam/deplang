@@ -97,8 +97,6 @@ std::unique_ptr<ExprAST> cParser::parse_expression() {
     return lhs;
 }
 
-
-// @TODO: Change return type
 std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
     this->get_next_token();
     if (this->m_current_token.token_type != TOK_IDENTIFIER) {
@@ -124,7 +122,7 @@ std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
 // func identifier(arg1, arg2, ...) {
 //    expressions_list
 // }
-std::unique_ptr<ExprAST> cParser::parse_function_definition() {
+std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
     this->get_next_token();
     if (this->m_current_token.token_type != TOK_IDENTIFIER) {
         // Error
@@ -159,6 +157,8 @@ std::unique_ptr<ExprAST> cParser::parse_function_definition() {
         }
     }
 
+    auto function_body = this->parse_expression();
+
     std::cout << "Parsed function: " << std::endl;
     std::cout << "Function name: " << function_name << std::endl;
     std::cout << "Args: " << std::endl;
@@ -169,7 +169,10 @@ std::unique_ptr<ExprAST> cParser::parse_function_definition() {
     }
 
     std::cout << std::endl << "End Function" << std::endl;
-    return nullptr;
+    // @TODO: Test with shared_ptr
+    auto function_definition = std::make_unique<FunctionDefinitionAST>(function_name, std::move(args), std::move(function_body));
+
+    return function_definition;
 }
 
 void cParser::parse() {
