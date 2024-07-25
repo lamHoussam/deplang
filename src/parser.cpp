@@ -106,6 +106,13 @@ std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
     }
     std::string param_name = this->m_current_token.value;
     this->get_next_token();
+    if (this->m_current_token.token_type != TOK_COLON) {
+        // Error
+        std::cerr << "Expected :" << std::endl;
+        return nullptr;
+    }
+
+    this->get_next_token();
     
     // std::cout << "Param: " << param_name << "; Type: " << this->m_current_token.value << std::endl;
     if (this->m_current_token.token_type != TOK_IDENTIFIER) {
@@ -157,6 +164,26 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         }
     }
 
+    this->get_next_token();
+    std::string return_type = "void";
+    if (this->m_current_token.token_type == TOK_ARROW) {
+        this->get_next_token();
+        if (this->m_current_token.token_type != TOK_IDENTIFIER) {
+            // Error
+            std::cerr << "Expected Identifier" << std::endl;
+            return nullptr;
+        }
+
+        return_type = this->m_current_token.value;
+    }
+
+    this->get_next_token();
+    if (this->m_current_token.token_type != TOK_LEFTCURBRACE) {
+        // Error
+        std::cerr << "Expected {" << std::endl;
+        return nullptr;
+    }
+
     auto function_body = this->parse_expression();
 
     std::cout << "Parsed function: " << std::endl;
@@ -168,10 +195,12 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         std::cout << "; Type: " << arg->get_param_type() << std::endl;
     }
 
+    std::cout << "Return type: " << return_type;
     std::cout << std::endl << "End Function" << std::endl;
     // @TODO: Test with shared_ptr
-    auto function_definition = std::make_unique<FunctionDefinitionAST>(function_name, std::move(args), std::move(function_body));
+    auto function_definition = std::make_unique<FunctionDefinitionAST>(function_name, std::move(args), return_type, std::move(function_body));
 
+    this->get_next_token(); // Consume last }
     return function_definition;
 }
 

@@ -54,13 +54,14 @@ private:
 
 class FunctionDefinitionAST {
 public: 
-    FunctionDefinitionAST(const std::string& function_name, std::vector<std::unique_ptr<FunctionParameterAST>> parameters, std::unique_ptr<ExprAST> function_body) : m_function_name(function_name), m_parameters(std::move(parameters)), m_function_body(std::move(function_body)) {}
+    FunctionDefinitionAST(const std::string& function_name, std::vector<std::unique_ptr<FunctionParameterAST>> parameters, const std::string& return_type, std::unique_ptr<ExprAST> function_body) : m_function_name(function_name), m_parameters(std::move(parameters)), m_return_type(return_type), m_function_body(std::move(function_body)) {}
 
     inline const std::string& get_function_name() { return m_function_name; }
 
 private:
     std::string m_function_name;
     std::vector<std::unique_ptr<FunctionParameterAST>> m_parameters;
+    std::string m_return_type;
     std::unique_ptr<ExprAST> m_function_body;
 };
 

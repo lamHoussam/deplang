@@ -25,6 +25,9 @@ enum eTokenType {
 
     TOK_LEFTCURBRACE  = -11,
     TOK_RIGHTCURBRACE = -12,
+
+    TOK_COLON         = -13,
+    TOK_ARROW         = -14,
 };
 
 std::string get_token_type_string(eTokenType token_type);
