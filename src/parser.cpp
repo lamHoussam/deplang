@@ -73,15 +73,18 @@ std::unique_ptr<ExprAST> cParser::parse_identifier_expr() {
 }
 
 std::unique_ptr<ExprAST> cParser::parse_primary() {
-    eTokenType peeked_token_type = this->m_tokens[this->m_current_index].token_type;
+    // eTokenType peeked_token_type = this->m_tokens[this->m_current_index].token_type;
+    this->get_next_token();
 
-    switch (peeked_token_type) {
+    switch (this->m_current_token.token_type) {
         case TOK_IDENTIFIER:
             return this->parse_identifier_expr();
         case TOK_NUMBER:
             return this->parse_number_expr();
         case TOK_LEFTPAR:
             return this->parse_paren_expr();
+        case TOK_VARDECL:
+            return this->parse_variable_declaration();
         default:
             return nullptr;
     }
@@ -184,7 +187,6 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         return nullptr;
     }
 
-    auto function_body = this->parse_expression();
 
     std::cout << "Parsed function: " << std::endl;
     std::cout << "Function name: " << function_name << std::endl;
@@ -195,13 +197,60 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         std::cout << "; Type: " << arg->get_param_type() << std::endl;
     }
 
+    std::vector<std::unique_ptr<ExprAST>> fn_body;
+    while (true) {
+        if (this->m_current_token.token_type == TOK_RIGHTCURBRACE) { break; }
+
+        auto expression = this->parse_expression();
+        if (!expression) { break; }
+
+        fn_body.push_back(std::move(expression));
+
+        this->get_next_token(); // Consume ;
+        if (this->m_current_token.token_type != TOK_SEMICOLON) {
+            // Error
+            std::cerr << "Expected ;" << std::endl;
+            break;
+        }
+    }
+
+    // @TODO: Test with shared_ptr
+    auto function_definition = std::make_unique<FunctionDefinitionAST>(function_name, std::move(args), return_type, std::move(fn_body));
+
     std::cout << "Return type: " << return_type;
     std::cout << std::endl << "End Function" << std::endl;
-    // @TODO: Test with shared_ptr
-    auto function_definition = std::make_unique<FunctionDefinitionAST>(function_name, std::move(args), return_type, std::move(function_body));
 
-    this->get_next_token(); // Consume last }
+    // this->get_next_token(); // Consume last }
     return function_definition;
+}
+
+std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration() {
+    this->get_next_token();
+    if (this->m_current_token.token_type != TOK_IDENTIFIER) {
+        // Error
+        std::cerr << "Expected identifier" << std::endl;
+        return nullptr;
+    }
+    std::string var_name = this->m_current_token.value;
+    
+    this->get_next_token();
+    if (this->m_current_token.token_type != TOK_COLON) {
+        // error
+        std::cerr << "Expected :" << std::endl;
+        return nullptr;
+    }
+
+    this->get_next_token();
+    if (this->m_current_token.token_type != TOK_IDENTIFIER) {
+        // error
+        std::cerr << "Expected identifier" << std::endl;
+        return nullptr;
+    }
+
+    std::string var_type = this->m_current_token.value;
+    std::cout << "Declared variable: " << var_name << " of type " << var_type << std::endl;
+
+    return std::make_unique<VariableDeclarationExprAST>(var_name, var_type);
 }
 
 void cParser::parse() {

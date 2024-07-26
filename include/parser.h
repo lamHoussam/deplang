@@ -41,6 +41,9 @@ private:
     std::unique_ptr<ExprAST> m_lhs, m_rhs;
 };
 
+
+// Function parameter expression
+// function_parameter := identifier ":" identifier
 class FunctionParameterAST {
 public:
    FunctionParameterAST(const std::string& param_name, const std::string& param_type): m_param_name(param_name), m_param_type(param_type) {}
@@ -52,9 +55,13 @@ private:
     std::string m_param_name, m_param_type;
 };
 
+// Function definition
+// func identifier "(" function_parameter* ")" "{"
+//    expression* ";"
+// "}"
 class FunctionDefinitionAST {
 public: 
-    FunctionDefinitionAST(const std::string& function_name, std::vector<std::unique_ptr<FunctionParameterAST>> parameters, const std::string& return_type, std::unique_ptr<ExprAST> function_body) : m_function_name(function_name), m_parameters(std::move(parameters)), m_return_type(return_type), m_function_body(std::move(function_body)) {}
+    FunctionDefinitionAST(const std::string& function_name, std::vector<std::unique_ptr<FunctionParameterAST>> parameters, const std::string& return_type, std::vector<std::unique_ptr<ExprAST>> function_body) : m_function_name(function_name), m_parameters(std::move(parameters)), m_return_type(return_type), m_function_body(std::move(function_body)) {}
 
     inline const std::string& get_function_name() { return m_function_name; }
 
@@ -62,7 +69,20 @@ private:
     std::string m_function_name;
     std::vector<std::unique_ptr<FunctionParameterAST>> m_parameters;
     std::string m_return_type;
-    std::unique_ptr<ExprAST> m_function_body;
+    std::vector<std::unique_ptr<ExprAST>> m_function_body;
+};
+
+
+// @Check: Looks a lot like FunctionParameterAST
+class VariableDeclarationExprAST: public ExprAST {
+public:
+    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type) : m_variable_name(variable_name), m_variable_type(variable_type) {}
+
+    inline const std::string& get_variable_name() { return m_variable_name; }
+    inline const std::string& get_variable_type() { return m_variable_type; }
+
+private:
+    std::string m_variable_name, m_variable_type;
 };
 
 
@@ -117,6 +137,8 @@ public:
 
     std::unique_ptr<FunctionParameterAST> parse_function_parameter();
     std::unique_ptr<FunctionDefinitionAST> parse_function_definition();
+
+    std::unique_ptr<VariableDeclarationExprAST> parse_variable_declaration();
 
     void parse();
 

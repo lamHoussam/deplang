@@ -28,6 +28,8 @@ std::string get_token_type_string(eTokenType token_type) {
         case TOK_COLON:         return "COLON";
         case TOK_ARROW:         return "ARROW";
 
+        case TOK_VARDECL:      return "VARDECL";
+
         case TOK_UNKNOWN:
         default:                return "UNKNOWN";
     }
@@ -110,6 +112,11 @@ sToken cLexer::get_next_token() {
 
         if (identifier_string == "func") {
             final_token.token_type = TOK_DEF;
+            final_token.value = identifier_string;
+
+            return final_token;
+        } else if (identifier_string == "let") {
+            final_token.token_type = TOK_VARDECL;
             final_token.value = identifier_string;
 
             return final_token;

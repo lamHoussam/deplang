@@ -28,6 +28,8 @@ enum eTokenType {
 
     TOK_COLON         = -13,
     TOK_ARROW         = -14,
+
+    TOK_VARDECL      = -15,
 };
 
 std::string get_token_type_string(eTokenType token_type);
