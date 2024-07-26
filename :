@@ -150,17 +150,13 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         return nullptr;
     }
 
-    eTokenType peeked_token_type = this->m_tokens[this->m_current_index].token_type;
-
-    // Parse function parameters
     std::vector<std::unique_ptr<FunctionParameterAST>> args;
-    if (peeked_token_type != TOK_RIGHTPAR) {
+    if (this->m_current_token.token_type != TOK_RIGHTPAR) {
         while (true) {
             auto param = this->parse_function_parameter();
             args.push_back(std::move(param));
             // std::cout << "Got param: " << param << std::endl;
             this->get_next_token();
-
 
             if (m_current_token.token_type == TOK_RIGHTPAR) 
                 break;
@@ -171,13 +167,10 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
                 return nullptr;
             }
         }
-    } else { 
-        this->get_next_token(); // Consume the ')' if no parameters
     }
 
     this->get_next_token();
     std::string return_type = "void";
-    std::cout << "-----------------" << this->m_current_token.value << std::endl;
     if (this->m_current_token.token_type == TOK_ARROW) {
         this->get_next_token();
         if (this->m_current_token.token_type != TOK_IDENTIFIER) {
@@ -260,20 +253,18 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
     }
 
     std::string var_type = this->m_current_token.value;
+    std::cout << "Declared variable: " << var_name << " of type " << var_type << std::endl;
 
     this->get_next_token();
-    if (this->m_current_token.token_type == TOK_SEMICOLON) {
-        std::cout << "Declared variable: " << var_name << " of type " << var_type << std::endl;
+    if (this->m_current_token.token_type == TOK_SEMICOLON)
         return std::make_unique<VariableDeclarationExprAST>(var_name, var_type);
-    }
 
     if (this->m_current_token.token_type == TOK_EQUAL) {
         // @TODO: Parse Expression
         auto expr = this->parse_expression();
         this->get_next_token();
-        std::cout << "Declared variable: " << var_name << " of type " << var_type << "; with expression" << std::endl;
-        if (this->m_current_token.token_type == TOK_SEMICOLON) {
-            return std::make_unique<VariableDeclarationExprAST>(var_name, var_type, std::move(expr));
+        if (this->m_current_token.token_type == TOK_SEMICOLON) { 
+            return nullptr; 
         }
     }
 
@@ -282,11 +273,11 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
 
 void cParser::parse() {
     // this->m_current_token = this->m_tokens[0];
+    this->get_next_token();
+    std::string type = get_token_type_string(this->m_current_token.token_type);
+    std::cout << "Found: " << type << std::endl;
 
     while (true) {
-        this->get_next_token();
-        std::string type = get_token_type_string(this->m_current_token.token_type);
-        std::cout << "Found: " << type << std::endl;
         switch (this->m_current_token.token_type) {
         case TOK_EOF:
             return;
@@ -295,7 +286,7 @@ void cParser::parse() {
             break;
         case TOK_DEF:
             this->parse_function_definition();
-            break;
+            return;
         default:
             return;
         }

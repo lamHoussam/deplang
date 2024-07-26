@@ -74,15 +74,19 @@ private:
 
 
 // @Check: Looks a lot like FunctionParameterAST
+// @Check: Does it need to be an ExprAST
 class VariableDeclarationExprAST: public ExprAST {
 public:
-    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type) : m_variable_name(variable_name), m_variable_type(variable_type) {}
+    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(nullptr) {}
+
+    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type, std::unique_ptr<ExprAST> expression) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(std::move(expression)) {}
 
     inline const std::string& get_variable_name() { return m_variable_name; }
     inline const std::string& get_variable_type() { return m_variable_type; }
 
 private:
     std::string m_variable_name, m_variable_type;
+    std::unique_ptr<ExprAST> m_expression;
 };
 
 

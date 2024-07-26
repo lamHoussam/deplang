@@ -27,6 +27,7 @@ std::string get_token_type_string(eTokenType token_type) {
 
         case TOK_COLON:         return "COLON";
         case TOK_ARROW:         return "ARROW";
+        case TOK_EQUAL:         return "EQUAL";
 
         case TOK_VARDECL:      return "VARDECL";
 
@@ -91,6 +92,12 @@ sToken cLexer::get_next_token() {
     if (last_char == ':') {
         final_token.token_type = TOK_COLON;
         final_token.value = ':';
+        return final_token;
+    }
+
+    if (last_char == '=') {
+        final_token.token_type = TOK_EQUAL;
+        final_token.value = '=';
         return final_token;
     }
 

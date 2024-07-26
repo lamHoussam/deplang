@@ -65,7 +65,5 @@ int main (int argc, char *argv[]) {
 
     std::cout << "Elapsed time: " << t_ns << " ns" << std::endl;
 
-    
-
     return 0;
 }
