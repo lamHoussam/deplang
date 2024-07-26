@@ -76,8 +76,6 @@ std::unique_ptr<ExprAST> cParser::parse_primary() {
     // eTokenType peeked_token_type = this->m_tokens[this->m_current_index].token_type;
     this->get_next_token();
 
-    std::cout << "Checked: " << this->m_current_token.value << std::endl;
-
     switch (this->m_current_token.token_type) {
         case TOK_IDENTIFIER:
             return this->parse_identifier_expr();
@@ -187,9 +185,10 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         }
 
         return_type = this->m_current_token.value;
+
+        this->get_next_token(); // Move to the '{'
     }
 
-    this->get_next_token();
     if (this->m_current_token.token_type != TOK_LEFTCURBRACE) {
         // Error
         std::cerr << "Expected {" << std::endl;
