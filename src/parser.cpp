@@ -40,33 +40,47 @@ std::unique_ptr<ExprAST> cParser::parse_paren_expr() {
 
 
 std::unique_ptr<ExprAST> cParser::parse_identifier_expr() {
-    this->get_next_token();
+    // this->get_next_token();
     std::string identifier_name = this->m_current_token.value;
+    this->get_next_token();
 
     // Simple variable
     if (this->m_current_token.token_type != TOK_LEFTPAR)
         return std::make_unique<VariableExprAST>(identifier_name);
 
     // Function call
-    this->get_next_token();
     std::vector<std::unique_ptr<ExprAST>> args;
-    if (this->m_current_token.token_type != TOK_RIGHTPAR) {
+
+    eTokenType peeked_token_type = this->m_tokens[this->m_current_index].token_type;
+
+    std::cout << "Calling function (" << identifier_name << ") with args ";
+    // Parse function parameters
+    if (peeked_token_type != TOK_RIGHTPAR) {
         while (true) {
-            if (auto arg = this->parse_expression())
+            if (auto arg = this->parse_expression()) {
+                if (VariableExprAST* var_expr = dynamic_cast<VariableExprAST*>(arg.get())) {
+                    std::cout << var_expr->get_name() << ", ";
+                }
                 args.push_back(std::move(arg));
+            }
             else
                 return nullptr;
+            // std::cout << "Got param: " << param << std::endl;
 
             if (m_current_token.token_type == TOK_RIGHTPAR) 
                 break;
 
-            if (m_current_token.token_type != TOK_COMMA)
+            if (m_current_token.token_type != TOK_COMMA) {
                 // Error
+                std::cerr << "Expected , or )" << std::endl;
                 return nullptr;
-
-            this->get_next_token();
+            }
         }
+    } else { 
+        this->get_next_token(); // Consume the ')' if no parameters
     }
+
+    std::cout << std::endl;
 
     this->get_next_token();
     return std::make_unique<CallExprAST>(identifier_name, std::move(args));

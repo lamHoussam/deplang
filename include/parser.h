@@ -17,6 +17,7 @@ public:
 class NumberExprAST : public ExprAST {
 public:
     NumberExprAST(int value) : m_value(value) {}
+
 private:
     int m_value;
 };
@@ -26,6 +27,7 @@ class VariableExprAST : public ExprAST {
 public:
     VariableExprAST(const std::string& name) : m_name(name) {}
 
+    const std::string& get_name() { return m_name; }
 private:
     std::string m_name;
 };

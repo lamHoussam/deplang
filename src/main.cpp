@@ -30,7 +30,6 @@ int main (int argc, char *argv[]) {
     fclose(input_file);
     content += EOF;
 
-
     clock_gettime(CLOCK_REALTIME, &end);
 
     double t_ns = (double)(end.tv_sec - start.tv_sec) * 1.0e9 +
