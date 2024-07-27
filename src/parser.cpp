@@ -44,6 +44,17 @@ std::unique_ptr<ExprAST> cParser::parse_identifier_expr() {
     std::string identifier_name = this->m_current_token.value;
     this->get_next_token();
 
+    // Assignment
+    if (this->m_current_token.token_type == TOK_EQUAL) {
+        // @TODO: Parse Expression
+        auto expr = this->parse_expression();
+        this->get_next_token();
+        std::cout << "Assign to variable: " << identifier_name << std::endl;
+        if (this->m_current_token.token_type == TOK_SEMICOLON) {
+            return std::make_unique<AssignmentExprAST>(identifier_name, std::move(expr));
+        }
+    }
+
     // Simple variable
     if (this->m_current_token.token_type != TOK_LEFTPAR)
         return std::make_unique<VariableExprAST>(identifier_name);
@@ -81,13 +92,11 @@ std::unique_ptr<ExprAST> cParser::parse_identifier_expr() {
     }
 
     std::cout << std::endl;
-
     this->get_next_token();
     return std::make_unique<CallExprAST>(identifier_name, std::move(args));
 }
 
 std::unique_ptr<ExprAST> cParser::parse_primary() {
-    // eTokenType peeked_token_type = this->m_tokens[this->m_current_index].token_type;
     this->get_next_token();
 
     switch (this->m_current_token.token_type) {

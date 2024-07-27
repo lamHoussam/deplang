@@ -104,6 +104,20 @@ private:
 };
 
 
+// Assignment Expression
+// identifier '=' expr
+class AssignmentExprAST : public ExprAST {
+public:
+    AssignmentExprAST(const std::string& variable, std::unique_ptr<ExprAST> rhs) : m_variable(variable), m_rhs(std::move(rhs)) {}
+
+    const std::string& get_variable_name() { return m_variable; }
+
+private:
+    std::string m_variable;
+    std::unique_ptr<ExprAST> m_rhs;
+};
+
+
 // Name([args])
 class PrototypeAST {
 public:
