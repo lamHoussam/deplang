@@ -1,15 +1,36 @@
 # pragma once
 
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Verifier.h"
+
 #include "../include/lexer.h"
+
+static std::unique_ptr<llvm::LLVMContext> TheContext;
+static std::unique_ptr<llvm::IRBuilder<>> Builder;
+static std::unique_ptr<llvm::Module> TheModule;
+static std::map<std::string, llvm::Value*> NamedValues;
+
+void initialize_module();
 
 class ExprAST {
 public:
     virtual ~ExprAST() = default;
+    virtual llvm::Value* codegen() = 0;
 };
 
 
@@ -17,9 +38,10 @@ public:
 class NumberExprAST : public ExprAST {
 public:
     NumberExprAST(int value) : m_value(value) {}
+    llvm::Value* codegen() override;
 
 private:
-    int m_value;
+    float m_value;
 };
 
 // Name
@@ -28,6 +50,7 @@ public:
     VariableExprAST(const std::string& name) : m_name(name) {}
 
     const std::string& get_name() { return m_name; }
+    llvm::Value* codegen() override;
 private:
     std::string m_name;
 };
@@ -38,6 +61,7 @@ public:
     BinaryExprAST(char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs) :
         m_op(op), m_lhs(std::move(lhs)), m_rhs(std::move(rhs)) {}   
 
+    llvm::Value* codegen() override;
 private:
     char m_op;
     std::unique_ptr<ExprAST> m_lhs, m_rhs;
@@ -67,6 +91,8 @@ public:
 
     inline const std::string& get_function_name() { return m_function_name; }
 
+    llvm::Function* codegen();
+
 private:
     std::string m_function_name;
     std::vector<std::unique_ptr<FunctionParameterAST>> m_parameters;
@@ -86,6 +112,8 @@ public:
     inline const std::string& get_variable_name() { return m_variable_name; }
     inline const std::string& get_variable_type() { return m_variable_type; }
 
+    llvm::Value* codegen() override;
+
 private:
     std::string m_variable_name, m_variable_type;
     std::unique_ptr<ExprAST> m_expression;
@@ -97,6 +125,8 @@ class CallExprAST : public ExprAST {
 public:
     CallExprAST(const std::string& callee, std::vector<std::unique_ptr<ExprAST>> args) : 
         m_callee(callee), m_args(std::move(args)) {}
+
+    llvm::Value* codegen() override;
 
 private:
     std::string m_callee;
@@ -111,6 +141,7 @@ public:
     AssignmentExprAST(const std::string& variable, std::unique_ptr<ExprAST> rhs) : m_variable(variable), m_rhs(std::move(rhs)) {}
 
     const std::string& get_variable_name() { return m_variable; }
+    llvm::Value* codegen() override;
 
 private:
     std::string m_variable;
@@ -145,7 +176,9 @@ private:
 
 class cParser {
 public:
-    cParser(std::vector<sToken> tokens) : m_tokens(std::move(tokens)), m_current_index(0) {}
+    cParser(std::vector<sToken> tokens) : m_tokens(std::move(tokens)), m_current_index(0) {
+        initialize_module();
+    }
 
     sToken get_next_token();
 
@@ -154,11 +187,14 @@ public:
     std::unique_ptr<ExprAST> parse_expression();
     std::unique_ptr<ExprAST> parse_identifier_expr();
     std::unique_ptr<ExprAST> parse_primary();
+    std::unique_ptr<ExprAST> parse_binop_expression(int expr_prec, std::unique_ptr<ExprAST> lhs);
 
     std::unique_ptr<FunctionParameterAST> parse_function_parameter();
     std::unique_ptr<FunctionDefinitionAST> parse_function_definition();
 
     std::unique_ptr<VariableDeclarationExprAST> parse_variable_declaration();
+
+    int get_binop_precedence(char op);
 
     void parse();
 

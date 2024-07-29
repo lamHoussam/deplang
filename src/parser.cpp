@@ -1,6 +1,4 @@
 #include "../include/parser.h"
-#include <iostream>
-#include <memory>
 
 /**
 * Function call
@@ -9,6 +7,82 @@
 * Binary operations
 *
 */
+
+
+
+void initialize_module() {
+    TheContext = std::make_unique<llvm::LLVMContext>();
+    TheModule = std::make_unique<llvm::Module>("JIT", *TheContext);
+    Builder = std::make_unique<llvm::IRBuilder<>>(*TheContext);
+}
+
+llvm::Value* NumberExprAST::codegen() {
+    // return llvm::ConstantInt::get(*TheContext, llvm::APInt(this->m_value));
+    return llvm::ConstantFP::get(*TheContext, llvm::APFloat(this->m_value));
+}
+
+llvm::Value* VariableExprAST::codegen() {
+    llvm::Value* value = NamedValues[this->m_name];
+    if (!value) {
+        // Error
+        std::cerr << "Error variable not found" << std::endl;
+    }
+    return value;
+}
+
+llvm::Value* BinaryExprAST::codegen() {
+    llvm::Value* l = this->m_lhs->codegen();
+    llvm::Value* r = this->m_rhs->codegen();
+
+    if (!l || !r) { return nullptr; }
+    switch (this->m_op) {
+    case '+':
+        return Builder->CreateFAdd(l, r, "addtmp");
+    case '-':
+        return Builder->CreateFSub(l, r, "subtmp");
+    case '*':
+        return Builder->CreateFMul(l, r, "multmp");
+    // case '<':
+    //     l = Builder->CreateFCmpULT(l, r, "cmptmp");
+    //     return Builder->CreateUIToFP(l, llvm::Type::getDoubleTy(TheContext), "booltmp");
+    default:
+        // Error
+        std::cerr << "Error " << std::endl;
+        return nullptr;    
+    }
+}
+
+llvm::Value* CallExprAST::codegen() {
+    llvm::Function* callee_f = TheModule->getFunction(this->m_callee);
+    if (!callee_f) {
+        // Error
+        std::cerr << "Unknown function referenced" << std::endl;
+        return nullptr;
+    }
+
+    if (callee_f->arg_size() != this->m_args.size()) {
+        // Error
+        std::cerr << "Incorrect number of arguments" << std::endl;
+        return nullptr;
+    }
+
+    std::vector<llvm::Value*> args_v;
+    for (unsigned i = 0, e = this->m_args.size(); i != e; ++i) {
+        args_v.push_back(this->m_args[i]->codegen());
+        if (!args_v.back()) { return nullptr; }
+    }
+
+    return Builder->CreateCall(callee_f, args_v, "calltmp");
+}
+
+llvm::Value* VariableDeclarationExprAST::codegen() {
+    return nullptr;
+}
+
+llvm::Value* AssignmentExprAST::codegen() {
+    return nullptr;
+}
+
 
 
 // @TODO: Implement Error management
@@ -115,12 +189,34 @@ std::unique_ptr<ExprAST> cParser::parse_primary() {
     return nullptr;
 }
 
+std::unique_ptr<ExprAST> cParser::parse_binop_expression(int expr_prec, std::unique_ptr<ExprAST> lhs) {
+
+    while (true) {
+        sToken peeked_tok = this->m_tokens[this->m_current_index];
+        int op = peeked_tok.value[0];
+        int tok_prec = this->get_binop_precedence(op);
+        std::cout << "BINOP: " << (char)op << std::endl;
+        
+        if (tok_prec < expr_prec) { return lhs; }
+
+        this->get_next_token();
+        auto rhs = this->parse_primary();
+        if (!rhs) { return nullptr; }
+
+        peeked_tok = this->m_tokens[this->m_current_index];
+        int next_op = peeked_tok.value[0];
+        int next_prec = this->get_binop_precedence(next_op);
+        if (tok_prec < next_prec) {}
+        lhs = std::make_unique<BinaryExprAST>(op, std::move(lhs), std::move(rhs));
+    }
+}
+
 std::unique_ptr<ExprAST> cParser::parse_expression() {
     auto lhs = this->parse_primary();
     if (!lhs) 
         return nullptr;
 
-    return lhs;
+    return this->parse_binop_expression(0, std::move(lhs));
 }
 
 std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
@@ -149,6 +245,25 @@ std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
     std::string param_type = this->m_current_token.value;
 
     return std::make_unique<FunctionParameterAST>(param_name, param_type);
+}
+
+
+
+llvm::Function* FunctionDefinitionAST::codegen() {
+    std::vector<llvm::Type*> doubles(this->m_parameters.size(),
+                                llvm::Type::getDoubleTy(*TheContext));
+
+
+    // Construct a function type
+    // @TODO: Check if can be changed for the new type system
+    llvm::FunctionType* func_type = llvm::FunctionType::get(llvm::Type::getDoubleTy(*TheContext), doubles, false);
+
+    llvm::Function* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, this->m_function_name, TheModule.get());
+
+    unsigned index = 0;
+    for (auto& arg : func->args()) { arg.setName(this->m_parameters[index++]->get_param_name()); }
+    
+    return func;
 }
 
 // Parse function definition
@@ -234,7 +349,11 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
 
         auto expression = this->parse_expression();
         if (!expression) { break; }
-        
+
+
+        llvm::Value* value = expression->codegen();
+        // if (value) { value->print(llvm::errs()); } 
+        // else { std::cout << ">>>>>>>> No Value" << std::endl; }
 
         fn_body.push_back(std::move(expression));
 
@@ -302,24 +421,36 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
     return nullptr;
 }
 
+int cParser::get_binop_precedence(char op) {
+    switch (op) {
+        case '<': return 10;
+        case '+':
+        case '-': return 20;
+        case '*': return 30;
+        default:  return -1;
+    }
+}
+
 void cParser::parse() {
     // this->m_current_token = this->m_tokens[0];
-
+    
     while (true) {
         this->get_next_token();
         std::string type = get_token_type_string(this->m_current_token.token_type);
         std::cout << "Found: " << type << std::endl;
         switch (this->m_current_token.token_type) {
+        default:
+            return;
         case TOK_EOF:
             return;
         case TOK_SEMICOLON:
             this->get_next_token();
             break;
         case TOK_DEF:
-            this->parse_function_definition();
+            auto func_def = this->parse_function_definition();
+            llvm::Function* f = func_def->codegen();
+            f->print(llvm::errs());
             break;
-        default:
-            return;
         }
     }
 }

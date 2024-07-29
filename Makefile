@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-Wall -std=c++17
+CFLAGS=-Wall -std=c++17 `llvm-config-14 --cxxflags --ldflags --system-libs --libs core`
 OBJ=obj
 BIN=bin
 SRC=src
