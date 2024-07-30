@@ -138,7 +138,6 @@ std::unique_ptr<ExprAST> cParser::parse_identifier_expr() {
 
     eTokenType peeked_token_type = this->m_tokens[this->m_current_index].token_type;
 
-    std::cout << "Calling function (" << identifier_name << ") with args ";
     // Parse function parameters
     if (peeked_token_type != TOK_RIGHTPAR) {
         while (true) {
@@ -206,7 +205,10 @@ std::unique_ptr<ExprAST> cParser::parse_binop_expression(int expr_prec, std::uni
         peeked_tok = this->m_tokens[this->m_current_index];
         int next_op = peeked_tok.value[0];
         int next_prec = this->get_binop_precedence(next_op);
-        if (tok_prec < next_prec) {}
+        if (tok_prec < next_prec) {
+            rhs = this->parse_binop_expression(tok_prec + 1, std::move(rhs));
+            if (!rhs) { return nullptr; }
+        }
         lhs = std::make_unique<BinaryExprAST>(op, std::move(lhs), std::move(rhs));
     }
 }
@@ -313,7 +315,6 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
 
     this->get_next_token();
     std::string return_type = "void";
-    std::cout << "-----------------" << this->m_current_token.value << std::endl;
     if (this->m_current_token.token_type == TOK_ARROW) {
         this->get_next_token();
         if (this->m_current_token.token_type != TOK_IDENTIFIER) {
@@ -333,16 +334,6 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         return nullptr;
     }
 
-
-    std::cout << "Parsed function: " << std::endl;
-    std::cout << "Function name: " << function_name << std::endl;
-    std::cout << "Args: " << std::endl;
-
-    for (auto& arg: args) {
-        std::cout << "Name: " << arg->get_param_name();
-        std::cout << "; Type: " << arg->get_param_type() << std::endl;
-    }
-
     std::vector<std::unique_ptr<ExprAST>> fn_body;
     while (true) {
         if (this->m_current_token.token_type == TOK_RIGHTCURBRACE) { break; }
@@ -352,8 +343,8 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
 
 
         llvm::Value* value = expression->codegen();
-        // if (value) { value->print(llvm::errs()); } 
-        // else { std::cout << ">>>>>>>> No Value" << std::endl; }
+        if (value) { value->print(llvm::errs()); std::cout << std::endl; } 
+        else { std::cout << ">>>>>>>> No Value" << std::endl; }
 
         fn_body.push_back(std::move(expression));
 
@@ -369,9 +360,6 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
 
     // @TODO: Test with shared_ptr
     auto function_definition = std::make_unique<FunctionDefinitionAST>(function_name, std::move(args), return_type, std::move(fn_body));
-
-    std::cout << "Return type: " << return_type;
-    std::cout << std::endl << "End Function" << std::endl;
 
     // this->get_next_token(); // Consume last }
     return function_definition;
@@ -404,7 +392,6 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
 
     this->get_next_token();
     if (this->m_current_token.token_type == TOK_SEMICOLON) {
-        std::cout << "Declared variable: " << var_name << " of type " << var_type << std::endl;
         return std::make_unique<VariableDeclarationExprAST>(var_name, var_type);
     }
 
@@ -412,7 +399,6 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
         // @TODO: Parse Expression
         auto expr = this->parse_expression();
         this->get_next_token();
-        std::cout << "Declared variable: " << var_name << " of type " << var_type << "; with expression" << std::endl;
         if (this->m_current_token.token_type == TOK_SEMICOLON) {
             return std::make_unique<VariableDeclarationExprAST>(var_name, var_type, std::move(expr));
         }
@@ -437,11 +423,11 @@ void cParser::parse() {
     while (true) {
         this->get_next_token();
         std::string type = get_token_type_string(this->m_current_token.token_type);
-        std::cout << "Found: " << type << std::endl;
         switch (this->m_current_token.token_type) {
         default:
             return;
         case TOK_EOF:
+            std::cout << "Found EOF" << std::endl;
             return;
         case TOK_SEMICOLON:
             this->get_next_token();

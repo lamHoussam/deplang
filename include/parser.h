@@ -1,6 +1,7 @@
 # pragma once
 
 #include <algorithm>
+#include <llvm-14/llvm/ADT/APFloat.h>
 #include <map>
 #include <memory>
 #include <string>
@@ -105,9 +106,16 @@ private:
 // @Check: Does it need to be an ExprAST
 class VariableDeclarationExprAST: public ExprAST {
 public:
-    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(nullptr) {}
+    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(nullptr) {
+        std::cout << "Declared variable: " << this->m_variable_name << std::endl;
+        NamedValues[this->m_variable_name] = llvm::ConstantFP::get(*TheContext, llvm::APFloat(0.0f));
+    }
 
-    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type, std::unique_ptr<ExprAST> expression) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(std::move(expression)) {}
+    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type, std::unique_ptr<ExprAST> expression) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(std::move(expression)) {
+
+        std::cout << "Declared variable: " << this->m_variable_name << std::endl;
+        NamedValues[this->m_variable_name] = m_expression->codegen();
+    }
 
     inline const std::string& get_variable_name() { return m_variable_name; }
     inline const std::string& get_variable_type() { return m_variable_type; }
