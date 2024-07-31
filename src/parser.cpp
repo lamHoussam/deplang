@@ -91,6 +91,10 @@ sToken cParser::get_next_token() {
     return this->m_current_token = this->m_tokens[this->m_current_index++];
 }
 
+const sToken& cParser::peek_next_token() {
+    return this->m_tokens[this->m_current_index];
+}
+
 std::unique_ptr<ExprAST> cParser::parse_number_expr() {
     sToken* token = &this->m_current_token;
     int num_value = atoi(token->value.c_str());
@@ -181,6 +185,8 @@ std::unique_ptr<ExprAST> cParser::parse_primary() {
             return this->parse_paren_expr();
         case TOK_VARDECL:
             return this->parse_variable_declaration();
+        case TOK_RETURN:
+            return this->parse_return_expr();
         default:
             return nullptr;
     }
@@ -211,6 +217,12 @@ std::unique_ptr<ExprAST> cParser::parse_binop_expression(int expr_prec, std::uni
         }
         lhs = std::make_unique<BinaryExprAST>(op, std::move(lhs), std::move(rhs));
     }
+}
+
+std::unique_ptr<ExprAST> cParser::parse_return_expr() {
+    // this->get_next_token();
+    std::cout << "Parse return expr" << std::endl;
+    return this->parse_expression();
 }
 
 std::unique_ptr<ExprAST> cParser::parse_expression() {
@@ -273,32 +285,38 @@ llvm::Function* FunctionDefinitionAST::codegen() {
 //    expressions_list
 // }
 std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
-    this->get_next_token();
-    if (this->m_current_token.token_type != TOK_IDENTIFIER) {
+    this->get_next_token(); // Consume 'func'
+    
+    sToken peeked_token = this->peek_next_token();
+        
+    if (peeked_token.token_type != TOK_IDENTIFIER) {
         // Error
         std::cerr << "Expected Identifier" << std::endl;
         return nullptr;
     }
 
-    std::string function_name = this->m_current_token.value;
-    this->get_next_token();
-    if (this->m_current_token.token_type != TOK_LEFTPAR) {
+    this->get_next_token(); // Consume identifier
+
+    std::string function_name = peeked_token.value;
+    peeked_token = this->peek_next_token();
+    if (peeked_token.token_type != TOK_LEFTPAR) {
         // Error
         std::cerr << "Expected (" << std::endl;
         return nullptr;
     }
 
-    eTokenType peeked_token_type = this->m_tokens[this->m_current_index].token_type;
+    this->get_next_token(); // Consume '('
+
+    peeked_token = this->peek_next_token();
 
     // Parse function parameters
     std::vector<std::unique_ptr<FunctionParameterAST>> args;
-    if (peeked_token_type != TOK_RIGHTPAR) {
+    if (peeked_token.token_type != TOK_RIGHTPAR) {
         while (true) {
             auto param = this->parse_function_parameter();
             args.push_back(std::move(param));
             // std::cout << "Got param: " << param << std::endl;
             this->get_next_token();
-
 
             if (m_current_token.token_type == TOK_RIGHTPAR) 
                 break;
@@ -313,27 +331,40 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         this->get_next_token(); // Consume the ')' if no parameters
     }
 
-    this->get_next_token();
+    // this->get_next_token();
+    peeked_token = this->peek_next_token();
+
     std::string return_type = "void";
-    if (this->m_current_token.token_type == TOK_ARROW) {
-        this->get_next_token();
-        if (this->m_current_token.token_type != TOK_IDENTIFIER) {
+    if (peeked_token.token_type == TOK_ARROW) {
+        this->get_next_token(); // Consume '->'
+
+        peeked_token = this->peek_next_token();
+        
+        if (peeked_token.token_type != TOK_IDENTIFIER) {
             // Error
             std::cerr << "Expected Identifier" << std::endl;
             return nullptr;
         }
 
-        return_type = this->m_current_token.value;
+        this->get_next_token(); // Consume identifier
 
-        this->get_next_token(); // Move to the '{'
+        return_type = peeked_token.value;
+
+        // this->get_next_token(); // Move to the '{'
+        peeked_token = this->peek_next_token();
     }
 
-    if (this->m_current_token.token_type != TOK_LEFTCURBRACE) {
+    if (peeked_token.token_type != TOK_LEFTCURBRACE) {
         // Error
         std::cerr << "Expected {" << std::endl;
         return nullptr;
     }
 
+    this->get_next_token(); // consume '{'
+
+    std::vector<std::unique_ptr<ExprAST>> fn_body;
+
+    /**
     std::vector<std::unique_ptr<ExprAST>> fn_body;
     while (true) {
         if (this->m_current_token.token_type == TOK_RIGHTCURBRACE) { break; }
@@ -348,20 +379,25 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
 
         fn_body.push_back(std::move(expression));
 
-        /**
         this->get_next_token(); // Consume ;
         if (this->m_current_token.token_type != TOK_SEMICOLON) {
             // Error
             std::cerr << "Expected ;" << std::endl;
             break;
         }
-        */
+    }
+    */
+
+    peeked_token = this->peek_next_token();
+    if (peeked_token.token_type != TOK_RIGHTCURBRACE) {
+        // Error
+        std::cerr << "Expected }" << std::endl;
+        return nullptr;
     }
 
-    // @TODO: Test with shared_ptr
-    auto function_definition = std::make_unique<FunctionDefinitionAST>(function_name, std::move(args), return_type, std::move(fn_body));
+    this->get_next_token(); // Consume last }
 
-    // this->get_next_token(); // Consume last }
+    auto function_definition = std::make_unique<FunctionDefinitionAST>(function_name, std::move(args), return_type, std::move(fn_body));
     return function_definition;
 }
 
@@ -421,9 +457,15 @@ void cParser::parse() {
     // this->m_current_token = this->m_tokens[0];
     
     while (true) {
-        this->get_next_token();
-        std::string type = get_token_type_string(this->m_current_token.token_type);
-        switch (this->m_current_token.token_type) {
+        // this->get_next_token();
+        
+        sToken peeked = this->peek_next_token();
+        std::string type = get_token_type_string(peeked.token_type);
+
+        std::cout << "Type: " << type << std::endl;
+        // this->get_next_token();
+        // continue;
+        switch (peeked.token_type) {
         default:
             return;
         case TOK_EOF:

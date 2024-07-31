@@ -6,7 +6,7 @@
 #include <time.h>
 
 int main (int argc, char *argv[]) {
-    std::string file_path = "./test/parser_test.dp";
+    std::string file_path = "./test/functions_test.dp";
     
     struct timespec start, end;
 

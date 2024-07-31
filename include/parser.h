@@ -1,6 +1,7 @@
 # pragma once
 
 #include <algorithm>
+#include <cwchar>
 #include <llvm-14/llvm/ADT/APFloat.h>
 #include <map>
 #include <memory>
@@ -189,12 +190,15 @@ public:
     }
 
     sToken get_next_token();
+    const sToken& peek_next_token();
 
     std::unique_ptr<ExprAST> parse_number_expr();
     std::unique_ptr<ExprAST> parse_paren_expr();
     std::unique_ptr<ExprAST> parse_expression();
     std::unique_ptr<ExprAST> parse_identifier_expr();
     std::unique_ptr<ExprAST> parse_primary();
+    std::unique_ptr<ExprAST> parse_return_expr();
+
     std::unique_ptr<ExprAST> parse_binop_expression(int expr_prec, std::unique_ptr<ExprAST> lhs);
 
     std::unique_ptr<FunctionParameterAST> parse_function_parameter();
