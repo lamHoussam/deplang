@@ -233,31 +233,42 @@ std::unique_ptr<ExprAST> cParser::parse_expression() {
     return this->parse_binop_expression(0, std::move(lhs));
 }
 
+
+// function_param := identifier ':' identifier
 std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
-    this->get_next_token();
-    if (this->m_current_token.token_type != TOK_IDENTIFIER) {
+    sToken peeked_token = this->peek_next_token();
+
+    if (peeked_token.token_type != TOK_IDENTIFIER) {
         // Error
         std::cerr << "Expected Identifier" << std::endl;
         return nullptr;
     }
-    std::string param_name = this->m_current_token.value;
-    this->get_next_token();
-    if (this->m_current_token.token_type != TOK_COLON) {
+    
+    this->get_next_token(); // Consume identifier
+
+    std::string param_name = peeked_token.value;
+    peeked_token = this->peek_next_token();
+
+    if (peeked_token.token_type != TOK_COLON) {
         // Error
         std::cerr << "Expected :" << std::endl;
         return nullptr;
     }
 
-    this->get_next_token();
+    this->get_next_token(); // Consume ':'
     
     // std::cout << "Param: " << param_name << "; Type: " << this->m_current_token.value << std::endl;
-    if (this->m_current_token.token_type != TOK_IDENTIFIER) {
+
+    peeked_token = this->peek_next_token();
+
+    if (peeked_token.token_type != TOK_IDENTIFIER) {
         // Error
         std::cerr << "Expected Identifier (type)" << std::endl;
         return nullptr;
     }
-    std::string param_type = this->m_current_token.value;
 
+    this->get_next_token(); // Consume identifier
+    std::string param_type = peeked_token.value;
     return std::make_unique<FunctionParameterAST>(param_name, param_type);
 }
 
@@ -364,8 +375,6 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
 
     std::vector<std::unique_ptr<ExprAST>> fn_body;
 
-    /**
-    std::vector<std::unique_ptr<ExprAST>> fn_body;
     while (true) {
         if (this->m_current_token.token_type == TOK_RIGHTCURBRACE) { break; }
 
@@ -386,7 +395,6 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
             break;
         }
     }
-    */
 
     peeked_token = this->peek_next_token();
     if (peeked_token.token_type != TOK_RIGHTCURBRACE) {
