@@ -6,8 +6,8 @@
 #include <time.h>
 
 int main (int argc, char *argv[]) {
-    std::string file_path = "./test/functions_test.dp";
-    
+    std::string file_path = "./test/expressions_test.dp";
+
     struct timespec start, end;
 
     std::cout << "-------------------------- Reading source file ----------------------------------" << std::endl;

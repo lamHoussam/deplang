@@ -8,6 +8,8 @@
 *
 */
 
+// @CHECK: Don't Consume ';' at end of expression
+
 
 
 void initialize_module() {
@@ -96,19 +98,23 @@ const sToken& cParser::peek_next_token() {
 }
 
 std::unique_ptr<ExprAST> cParser::parse_number_expr() {
-    sToken* token = &this->m_current_token;
-    int num_value = atoi(token->value.c_str());
+    sToken peeked_token = this->peek_next_token();
+    int num_value = atoi(peeked_token.value.c_str());
+    std::cout << "Found Numeric Value: " << num_value << std::endl;
     auto result = std::make_unique<NumberExprAST>(num_value);
+    this->get_next_token(); // Consume number
+
     return std::move(result);
 }
 
 
-// ( Expression )
+// '(' expression ')'
 std::unique_ptr<ExprAST> cParser::parse_paren_expr() {
-    this->get_next_token();
+    this->get_next_token(); // Consume '('
     // Parse Expression
     if (this->m_current_token.token_type != TOK_RIGHTPAR) {
         auto result = this->parse_expression();
+        this->get_next_token(); // Consume ')'
         return result;
     }
 
@@ -117,48 +123,49 @@ std::unique_ptr<ExprAST> cParser::parse_paren_expr() {
 }
 
 
+// identifier_expr := identifier | identifier '=' expr ';' | function_call
 std::unique_ptr<ExprAST> cParser::parse_identifier_expr() {
     // this->get_next_token();
-    std::string identifier_name = this->m_current_token.value;
-    this->get_next_token();
+    sToken peeked_token = this->peek_next_token();
+    std::string identifier_name = peeked_token.value;
+    this->get_next_token(); // Consume identifier
+
+    peeked_token = this->peek_next_token();
 
     // Assignment
-    if (this->m_current_token.token_type == TOK_EQUAL) {
+    if (peeked_token.token_type == TOK_EQUAL) {
+        this->get_next_token(); // Consume '='
         // @TODO: Parse Expression
         auto expr = this->parse_expression();
-        this->get_next_token();
+        peeked_token = this->peek_next_token();
         std::cout << "Assign to variable: " << identifier_name << std::endl;
-        if (this->m_current_token.token_type == TOK_SEMICOLON) {
+        if (peeked_token.token_type == TOK_SEMICOLON) {
             return std::make_unique<AssignmentExprAST>(identifier_name, std::move(expr));
         }
     }
 
     // Simple variable
-    if (this->m_current_token.token_type != TOK_LEFTPAR)
+    if (peeked_token.token_type != TOK_LEFTPAR)
         return std::make_unique<VariableExprAST>(identifier_name);
+
+    this->get_next_token(); // Consume '('
+
+    peeked_token = this->peek_next_token();
 
     // Function call
     std::vector<std::unique_ptr<ExprAST>> args;
-
-    eTokenType peeked_token_type = this->m_tokens[this->m_current_index].token_type;
-
     // Parse function parameters
-    if (peeked_token_type != TOK_RIGHTPAR) {
+    if (peeked_token.token_type != TOK_RIGHTPAR) {
         while (true) {
             if (auto arg = this->parse_expression()) {
-                if (VariableExprAST* var_expr = dynamic_cast<VariableExprAST*>(arg.get())) {
-                    std::cout << var_expr->get_name() << ", ";
-                }
                 args.push_back(std::move(arg));
             }
-            else
-                return nullptr;
-            // std::cout << "Got param: " << param << std::endl;
+            else { return nullptr; }
+            this->get_next_token();
 
-            if (m_current_token.token_type == TOK_RIGHTPAR) 
-                break;
+            if (peeked_token.token_type == TOK_RIGHTPAR) { break; }
 
-            if (m_current_token.token_type != TOK_COMMA) {
+            if (peeked_token.token_type != TOK_COMMA) {
                 // Error
                 std::cerr << "Expected , or )" << std::endl;
                 return nullptr;
@@ -169,14 +176,15 @@ std::unique_ptr<ExprAST> cParser::parse_identifier_expr() {
     }
 
     std::cout << std::endl;
-    this->get_next_token();
+    // this->get_next_token();
     return std::make_unique<CallExprAST>(identifier_name, std::move(args));
 }
 
 std::unique_ptr<ExprAST> cParser::parse_primary() {
-    this->get_next_token();
+    // this->get_next_token();
 
-    switch (this->m_current_token.token_type) {
+    sToken peeked_token = this->peek_next_token();
+    switch (peeked_token.token_type) {
         case TOK_IDENTIFIER:
             return this->parse_identifier_expr();
         case TOK_NUMBER:
@@ -190,26 +198,25 @@ std::unique_ptr<ExprAST> cParser::parse_primary() {
         default:
             return nullptr;
     }
-
-    return nullptr;
 }
 
 std::unique_ptr<ExprAST> cParser::parse_binop_expression(int expr_prec, std::unique_ptr<ExprAST> lhs) {
+    sToken peeked_token;
 
     while (true) {
-        sToken peeked_tok = this->m_tokens[this->m_current_index];
-        int op = peeked_tok.value[0];
+        peeked_token = this->peek_next_token();
+        if (peeked_token.token_type == TOK_EOF) { return nullptr; }
+        int op = peeked_token.value[0];
         int tok_prec = this->get_binop_precedence(op);
-        std::cout << "BINOP: " << (char)op << std::endl;
-        
+
         if (tok_prec < expr_prec) { return lhs; }
 
         this->get_next_token();
         auto rhs = this->parse_primary();
         if (!rhs) { return nullptr; }
 
-        peeked_tok = this->m_tokens[this->m_current_index];
-        int next_op = peeked_tok.value[0];
+        peeked_token = this->peek_next_token();
+        int next_op = peeked_token.value[0];
         int next_prec = this->get_binop_precedence(next_op);
         if (tok_prec < next_prec) {
             rhs = this->parse_binop_expression(tok_prec + 1, std::move(rhs));
@@ -229,6 +236,10 @@ std::unique_ptr<ExprAST> cParser::parse_expression() {
     auto lhs = this->parse_primary();
     if (!lhs) 
         return nullptr;
+
+    // @TODO: Remove after rewriting parse binop 
+    // sToken peeked_token = this->peek_next_token();
+    // std::cout << "Token After primary expression: " << peeked_token.value << std::endl;
 
     return this->parse_binop_expression(0, std::move(lhs));
 }
@@ -257,8 +268,6 @@ std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
 
     this->get_next_token(); // Consume ':'
     
-    // std::cout << "Param: " << param_name << "; Type: " << this->m_current_token.value << std::endl;
-
     peeked_token = this->peek_next_token();
 
     if (peeked_token.token_type != TOK_IDENTIFIER) {
@@ -326,7 +335,6 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         while (true) {
             auto param = this->parse_function_parameter();
             args.push_back(std::move(param));
-            // std::cout << "Got param: " << param << std::endl;
             this->get_next_token();
 
             if (m_current_token.token_type == TOK_RIGHTPAR) 
@@ -374,32 +382,29 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
     this->get_next_token(); // consume '{'
 
     std::vector<std::unique_ptr<ExprAST>> fn_body;
-
     while (true) {
-        if (this->m_current_token.token_type == TOK_RIGHTCURBRACE) { break; }
+        peeked_token = this->peek_next_token();
+        if (peeked_token.token_type == TOK_RIGHTCURBRACE) { break; }
 
         auto expression = this->parse_expression();
+        peeked_token = this->peek_next_token();
+
+        this->get_next_token(); // Consume ';'
+
         if (!expression) { break; }
 
-
+        // @CHECK: Code generation
         llvm::Value* value = expression->codegen();
         if (value) { value->print(llvm::errs()); std::cout << std::endl; } 
         else { std::cout << ">>>>>>>> No Value" << std::endl; }
 
         fn_body.push_back(std::move(expression));
-
-        this->get_next_token(); // Consume ;
-        if (this->m_current_token.token_type != TOK_SEMICOLON) {
-            // Error
-            std::cerr << "Expected ;" << std::endl;
-            break;
-        }
     }
 
     peeked_token = this->peek_next_token();
     if (peeked_token.token_type != TOK_RIGHTCURBRACE) {
         // Error
-        std::cerr << "Expected }" << std::endl;
+        std::cerr << "Expected }; Got: " << peeked_token.value << std::endl;
         return nullptr;
     }
 
@@ -410,40 +415,51 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
 }
 
 std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration() {
-    this->get_next_token();
-    if (this->m_current_token.token_type != TOK_IDENTIFIER) {
+
+    this->get_next_token(); // Consume 'let'
+    sToken peeked_token = this->peek_next_token();
+
+    if (peeked_token.token_type != TOK_IDENTIFIER) {
         // Error
         std::cerr << "Expected identifier" << std::endl;
         return nullptr;
     }
-    std::string var_name = this->m_current_token.value;
     
-    this->get_next_token();
-    if (this->m_current_token.token_type != TOK_COLON) {
+    this->get_next_token(); // Consume identifier
+
+    std::string var_name = peeked_token.value;
+    peeked_token = this->peek_next_token();
+
+    if (peeked_token.token_type != TOK_COLON) {
         // error
         std::cerr << "Expected :" << std::endl;
         return nullptr;
     }
 
-    this->get_next_token();
-    if (this->m_current_token.token_type != TOK_IDENTIFIER) {
+    this->get_next_token(); // Consume '='
+
+    peeked_token = this->peek_next_token();
+    if (peeked_token.token_type != TOK_IDENTIFIER) {
         // error
         std::cerr << "Expected identifier" << std::endl;
         return nullptr;
     }
 
-    std::string var_type = this->m_current_token.value;
+    std::string var_type = peeked_token.value;
 
-    this->get_next_token();
-    if (this->m_current_token.token_type == TOK_SEMICOLON) {
+    this->get_next_token(); // Consume identifier
+    peeked_token = this->peek_next_token();
+
+    if (peeked_token.token_type == TOK_SEMICOLON) {
         return std::make_unique<VariableDeclarationExprAST>(var_name, var_type);
     }
 
-    if (this->m_current_token.token_type == TOK_EQUAL) {
+    if (peeked_token.token_type == TOK_EQUAL) {
+        this->get_next_token(); // Consume '='
         // @TODO: Parse Expression
         auto expr = this->parse_expression();
-        this->get_next_token();
-        if (this->m_current_token.token_type == TOK_SEMICOLON) {
+        peeked_token = this->peek_next_token();
+        if (peeked_token.token_type == TOK_SEMICOLON) {
             return std::make_unique<VariableDeclarationExprAST>(var_name, var_type, std::move(expr));
         }
     }
@@ -469,8 +485,6 @@ void cParser::parse() {
         
         sToken peeked = this->peek_next_token();
         std::string type = get_token_type_string(peeked.token_type);
-
-        std::cout << "Type: " << type << std::endl;
         // this->get_next_token();
         // continue;
         switch (peeked.token_type) {
