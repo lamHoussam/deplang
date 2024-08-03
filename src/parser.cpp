@@ -78,17 +78,19 @@ llvm::Value* CallExprAST::codegen() {
 }
 
 llvm::Value* VariableDeclarationExprAST::codegen() {
-    return nullptr;
+    llvm::Value* value = nullptr;
+    if (this->m_expression) { value = this->m_expression->codegen(); }
+    return NamedValues[this->m_variable_name] = value;
 }
 
 llvm::Value* AssignmentExprAST::codegen() {
-    return nullptr;
+    llvm::Value* value = this->m_rhs->codegen();
+    return NamedValues[this->m_variable] = value;
 }
 
 
 
 // @TODO: Implement Error management
-
 sToken cParser::get_next_token() {
     return this->m_current_token = this->m_tokens[this->m_current_index++];
 }
@@ -138,7 +140,6 @@ std::unique_ptr<ExprAST> cParser::parse_identifier_expr() {
         // @TODO: Parse Expression
         auto expr = this->parse_expression();
         peeked_token = this->peek_next_token();
-        std::cout << "Assign to variable: " << identifier_name << std::endl;
         if (peeked_token.token_type == TOK_SEMICOLON) {
             return std::make_unique<AssignmentExprAST>(identifier_name, std::move(expr));
         }
@@ -151,6 +152,7 @@ std::unique_ptr<ExprAST> cParser::parse_identifier_expr() {
     this->get_next_token(); // Consume '('
 
     peeked_token = this->peek_next_token();
+    std::cout << "Token found here: " << peeked_token.value << std::endl;
 
     // Function call
     std::vector<std::unique_ptr<ExprAST>> args;
@@ -161,23 +163,36 @@ std::unique_ptr<ExprAST> cParser::parse_identifier_expr() {
                 args.push_back(std::move(arg));
             }
             else { return nullptr; }
-            this->get_next_token();
+            // this->get_next_token();
+            peeked_token = this->peek_next_token();
 
-            if (peeked_token.token_type == TOK_RIGHTPAR) { break; }
+            if (peeked_token.token_type == TOK_RIGHTPAR) { 
+                this->get_next_token(); // Consume ')'
+                break; 
+            }
 
             if (peeked_token.token_type != TOK_COMMA) {
                 // Error
-                std::cerr << "Expected , or )" << std::endl;
+                std::cerr << "Expected , or ) | Got: " << peeked_token.value << std::endl;
                 return nullptr;
             }
+
+            this->get_next_token(); // Consume ','
         }
     } else { 
         this->get_next_token(); // Consume the ')' if no parameters
     }
 
-    std::cout << std::endl;
-    // this->get_next_token();
-    return std::make_unique<CallExprAST>(identifier_name, std::move(args));
+    peeked_token = this->peek_next_token();
+    if (peeked_token.token_type == TOK_SEMICOLON) {
+        std::cout << std::endl;
+        // this->get_next_token();
+        return std::make_unique<CallExprAST>(identifier_name, std::move(args));
+    } else { 
+        std::cout << "Expected ; | Got: " << peeked_token.value << std::endl;
+        return nullptr; 
+    }
+
 }
 
 std::unique_ptr<ExprAST> cParser::parse_primary() {
@@ -227,9 +242,11 @@ std::unique_ptr<ExprAST> cParser::parse_binop_expression(int expr_prec, std::uni
 }
 
 std::unique_ptr<ExprAST> cParser::parse_return_expr() {
-    // this->get_next_token();
     std::cout << "Parse return expr" << std::endl;
-    return this->parse_expression();
+    this->get_next_token(); // Consume 'return'
+    auto final_expr = this->parse_expression();
+    // @TODO: Code generation
+    return final_expr;
 }
 
 std::unique_ptr<ExprAST> cParser::parse_expression() {
@@ -308,7 +325,6 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
     this->get_next_token(); // Consume 'func'
     
     sToken peeked_token = this->peek_next_token();
-        
     if (peeked_token.token_type != TOK_IDENTIFIER) {
         // Error
         std::cerr << "Expected Identifier" << std::endl;
@@ -391,7 +407,7 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
 
         this->get_next_token(); // Consume ';'
 
-        if (!expression) { break; }
+        if (!expression) { std::cout << "Got no expression\n"; break; }
 
         // @CHECK: Code generation
         llvm::Value* value = expression->codegen();
