@@ -4,7 +4,7 @@
 cLexer::cLexer(std::string input_str) {
     this->m_input_str = input_str;
     this->m_current_pos = 0;
-    this->m_current_line_count = 0;
+    this->m_current_line_count = 1;
 }
 
 std::string get_token_type_string(eTokenType token_type) {
@@ -58,53 +58,7 @@ sToken cLexer::get_next_token() {
 
     // @TODO: Switch to switch statement
     // this->consume_char();
-    if (last_char == ';') {
-        final_token.token_type = TOK_SEMICOLON;
-        final_token.value = ';';
-        return final_token;
-    }
 
-    if (last_char == '(') {
-        final_token.token_type = TOK_LEFTPAR;
-        final_token.value = '(';
-        return final_token;
-    }
-
-    if (last_char == ')') {
-        final_token.token_type = TOK_RIGHTPAR;
-        final_token.value = ')';
-        return final_token;
-    }
-
-    if (last_char == ',') {
-        final_token.token_type = TOK_COMMA;
-        final_token.value = ',';
-        return final_token;
-    }
-
-    if (last_char == '{') {
-        final_token.token_type = TOK_LEFTCURBRACE;
-        final_token.value = '{';
-        return final_token;
-    }
-
-    if (last_char == '}') {
-        final_token.token_type = TOK_RIGHTCURBRACE;
-        final_token.value = '}';
-        return final_token;
-    }
-
-    if (last_char == ':') {
-        final_token.token_type = TOK_COLON;
-        final_token.value = ':';
-        return final_token;
-    }
-
-    if (last_char == '=') {
-        final_token.token_type = TOK_EQUAL;
-        final_token.value = '=';
-        return final_token;
-    }
 
     // @TODO: Change position
     if (last_char == '-' && this->peek_char() == '>') {
@@ -145,13 +99,6 @@ sToken cLexer::get_next_token() {
         }
     }
 
-    // Operator
-    if (is_operator(last_char)) {
-        final_token.token_type = TOK_OP;
-        final_token.value = last_char;
-        return final_token;
-    }
-
     // Number
     if (isdigit(last_char)) {
         identifier_string = last_char;
@@ -166,11 +113,45 @@ sToken cLexer::get_next_token() {
         return final_token;
     }
 
-    if (last_char == EOF) {
+    switch (last_char) {
+    case ';': 
+        final_token.token_type = TOK_SEMICOLON;
+        break;
+    case '(':
+        final_token.token_type = TOK_LEFTPAR;
+        break;
+    case ')':
+        final_token.token_type = TOK_RIGHTPAR;
+        break;
+    case ',':
+        final_token.token_type = TOK_COMMA;
+        break;
+    case '{':
+        final_token.token_type = TOK_LEFTCURBRACE;
+        break;
+    case '}':
+        final_token.token_type = TOK_RIGHTCURBRACE;
+        break;
+    case ':':
+        final_token.token_type = TOK_COLON;
+        break;
+    case '=':
+        final_token.token_type = TOK_EQUAL;
+        break;
+    case '+':
+    case '-':
+    case '*':
+    case '/':
+        final_token.token_type = TOK_OP;
+        break;
+    case EOF:
         final_token.token_type = TOK_EOF;
-        return final_token;
+        break;
+    default:
+        break;
     }
-    
+
+    final_token.value = last_char;
     return final_token;
 }
 

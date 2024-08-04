@@ -23,9 +23,7 @@ cCodeGenerator::cCodeGenerator() {
 
 // Expressions
 
-NumberExprAST::NumberExprAST(int value) : m_value(value) {
-
-}
+NumberExprAST::NumberExprAST(int value) : m_value(value) {}
 
 llvm::Value* NumberExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     // return llvm::ConstantInt::get(*code_generator->m_Context, llvm::APInt(this->m_value));
@@ -34,9 +32,7 @@ llvm::Value* NumberExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generat
 
 // Variable Expression AST
 
-VariableExprAST::VariableExprAST(const std::string& name) : m_name(name) {
-
-}
+VariableExprAST::VariableExprAST(const std::string& name) : m_name(name) {}
 
 const std::string& VariableExprAST::get_name() { return m_name; }
 
