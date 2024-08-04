@@ -35,6 +35,11 @@
 
 #include "../include/lexer.h"
 
+
+// @TODO: Change Macro
+# define DEPLANG_PARSER_ERROR(err) std::cerr << "::[Parser]::Error: " << err << std::endl
+
+
 class cCodeGenerator {
 public:
     cCodeGenerator();
@@ -200,6 +205,7 @@ public:
 
     void parse();
     std::shared_ptr<cCodeGenerator> m_code_generator;
+    
 
     ~cParser() = default;
 

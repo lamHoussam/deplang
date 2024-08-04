@@ -41,8 +41,7 @@ llvm::Value* VariableExprAST::codegen(std::shared_ptr<cCodeGenerator> code_gener
     if ((value = code_generator->m_ArgumentsValues[this->m_name])) { return value; }
     else if ((value = code_generator->m_NamedValues[this->m_name])) { return value; }
     else {
-        // Error
-        std::cerr << "Error variable " << this->m_name << " not found" << std::endl;
+        DEPLANG_PARSER_ERROR("Variable " << this->m_name << " not found");
         return nullptr;
     }
 }
@@ -67,9 +66,8 @@ llvm::Value* BinaryExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generat
     //     l = code_generator->m_Builder->CreateFCmpULT(l, r, "cmptmp");
     //     return code_generator->m_Builder->CreateUIToFP(l, llvm::Type::getDoubleTy(g_code_generator->m_Context), "booltmp");
     default:
-        // Error
-        std::cerr << "Error " << std::endl;
-        return nullptr;    
+        DEPLANG_PARSER_ERROR("Expected Operator");
+        return nullptr;
     }
 }
 
@@ -156,14 +154,12 @@ CallExprAST::CallExprAST(const std::string& callee, std::vector<std::unique_ptr<
 llvm::Value* CallExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     llvm::Function* callee_f = code_generator->m_Module->getFunction(this->m_callee);
     if (!callee_f) {
-        // Error
-        std::cerr << "Unknown function referenced" << std::endl;
+        DEPLANG_PARSER_ERROR("Function " << this->m_callee << " not found");
         return nullptr;
     }
 
     if (callee_f->arg_size() != this->m_args.size()) {
-        // Error
-        std::cerr << "Incorrect number of arguments" << std::endl;
+        DEPLANG_PARSER_ERROR("Expected " << callee_f->arg_size() << ", got " << this->m_args.size() << "arguments");
         return nullptr;
     }
 
@@ -321,8 +317,7 @@ std::unique_ptr<ExprAST> cParser::parse_identifier_expr() {
             }
 
             if (peeked_token.token_type != TOK_COMMA) {
-                // Error
-                std::cerr << "Expected , or ) | Got: " << peeked_token.value << std::endl;
+                DEPLANG_PARSER_ERROR("Expected ',' or ')', got " << peeked_token.value << " at line " << peeked_token.line_number);
                 return nullptr;
             }
 
@@ -410,8 +405,7 @@ std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
     sToken peeked_token = this->peek_next_token();
 
     if (peeked_token.token_type != TOK_IDENTIFIER) {
-        // Error
-        std::cerr << "Expected Identifier" << std::endl;
+        DEPLANG_PARSER_ERROR("Expected identifier, got " << peeked_token.value << " at line " << peeked_token.line_number);
         return nullptr;
     }
     
@@ -421,8 +415,7 @@ std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
     peeked_token = this->peek_next_token();
 
     if (peeked_token.token_type != TOK_COLON) {
-        // Error
-        std::cerr << "Expected :" << std::endl;
+        DEPLANG_PARSER_ERROR("Expected ':', got " << peeked_token.value << " at line " << peeked_token.line_number);
         return nullptr;
     }
 
@@ -431,8 +424,7 @@ std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
     peeked_token = this->peek_next_token();
 
     if (peeked_token.token_type != TOK_IDENTIFIER) {
-        // Error
-        std::cerr << "Expected Identifier (type)" << std::endl;
+        DEPLANG_PARSER_ERROR("Expected identifier, got " << peeked_token.value << " at line " << peeked_token.line_number);
         return nullptr;
     }
 
@@ -453,8 +445,7 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
     
     sToken peeked_token = this->peek_next_token();
     if (peeked_token.token_type != TOK_IDENTIFIER) {
-        // Error
-        std::cerr << "Expected Identifier" << std::endl;
+        DEPLANG_PARSER_ERROR("Expected identifier, got " << peeked_token.value << " at line " << peeked_token.line_number);
         return nullptr;
     }
 
@@ -463,8 +454,7 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
     std::string function_name = peeked_token.value;
     peeked_token = this->peek_next_token();
     if (peeked_token.token_type != TOK_LEFTPAR) {
-        // Error
-        std::cerr << "Expected (" << std::endl;
+        DEPLANG_PARSER_ERROR("Expected '(', got " << peeked_token.value << " at line " << peeked_token.line_number);
         return nullptr;
     }
 
@@ -484,8 +474,7 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
                 break;
 
             if (m_current_token.token_type != TOK_COMMA) {
-                // Error
-                std::cerr << "Expected , or )" << std::endl;
+                DEPLANG_PARSER_ERROR("Expected ',' or ')', got " << peeked_token.value << " at line " << peeked_token.line_number);
                 return nullptr;
             }
         }
@@ -503,8 +492,7 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         peeked_token = this->peek_next_token();
         
         if (peeked_token.token_type != TOK_IDENTIFIER) {
-            // Error
-            std::cerr << "Expected Identifier" << std::endl;
+            DEPLANG_PARSER_ERROR("Expected identifier got " << peeked_token.value << " at line " << peeked_token.line_number);
             return nullptr;
         }
 
@@ -517,8 +505,7 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
     }
 
     if (peeked_token.token_type != TOK_LEFTCURBRACE) {
-        // Error
-        std::cerr << "Expected {" << std::endl;
+        DEPLANG_PARSER_ERROR("Expected '{' got " << peeked_token.value << " at line " << peeked_token.line_number);
         return nullptr;
     }
 
@@ -539,8 +526,7 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
 
     peeked_token = this->peek_next_token();
     if (peeked_token.token_type != TOK_RIGHTCURBRACE) {
-        // Error
-        std::cerr << "Expected }; Got: " << peeked_token.value << std::endl;
+        DEPLANG_PARSER_ERROR("Expected '}' got " << peeked_token.value << " at line " << peeked_token.line_number);
         return nullptr;
     }
 
@@ -556,8 +542,7 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
     sToken peeked_token = this->peek_next_token();
 
     if (peeked_token.token_type != TOK_IDENTIFIER) {
-        // Error
-        std::cerr << "Expected identifier" << std::endl;
+        DEPLANG_PARSER_ERROR("Expected identifier got " << peeked_token.value << " at line " << peeked_token.line_number);
         return nullptr;
     }
     
@@ -567,8 +552,7 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
     peeked_token = this->peek_next_token();
 
     if (peeked_token.token_type != TOK_COLON) {
-        // error
-        std::cerr << "Expected :" << std::endl;
+        DEPLANG_PARSER_ERROR("Expected ':' got " << peeked_token.value << " at line " << peeked_token.line_number);
         return nullptr;
     }
 
@@ -576,8 +560,7 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
 
     peeked_token = this->peek_next_token();
     if (peeked_token.token_type != TOK_IDENTIFIER) {
-        // error
-        std::cerr << "Expected identifier" << std::endl;
+        DEPLANG_PARSER_ERROR("Expected identifier got " << peeked_token.value << " at line " << peeked_token.line_number);
         return nullptr;
     }
 
@@ -592,7 +575,6 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
 
     if (peeked_token.token_type == TOK_EQUAL) {
         this->get_next_token(); // Consume '='
-        // @TODO: Parse Expression
         auto expr = this->parse_expression();
         peeked_token = this->peek_next_token();
         if (peeked_token.token_type == TOK_SEMICOLON) {
