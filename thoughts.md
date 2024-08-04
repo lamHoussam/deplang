@@ -24,7 +24,7 @@ statement = variable_declaration
             | function_call
             | function_prototype
 
-variable_declaration = "let" identifier ("as" identifier)? "=" expression
+variable_declaration = "let" identifier (":" identifier)? "=" expression
 variable_assignment = identifier "=" expression
 function_call = identifier "(" function_arguments_list ")"
 function_prototype = "func" identifier "(" function_parameters_list ")" "->" identifier

@@ -4,6 +4,7 @@
 cLexer::cLexer(std::string input_str) {
     this->m_input_str = input_str;
     this->m_current_pos = 0;
+    this->m_current_line_count = 0;
 }
 
 std::string get_token_type_string(eTokenType token_type) {
@@ -48,9 +49,12 @@ sToken cLexer::get_next_token() {
 
     std::string identifier_string;
 
-    while (isspace(last_char))
+    while (isspace(last_char)) {
+        if (last_char == '\n') { ++this->m_current_line_count; }
         last_char = this->consume_char();
+    }
 
+    final_token.line_number = this->m_current_line_count;
 
     // @TODO: Switch to switch statement
     // this->consume_char();
@@ -196,6 +200,6 @@ void cLexer::lex() {
 void cLexer::print_tokens() const {
     std::cout << "Lexer Tokens" << std::endl;
     for (auto token : this->m_tokens)
-        std::cout << "Token: " << get_token_type_string(token.token_type) << "; Value: " << token.value << std::endl;
+        std::cout << "Token: " << get_token_type_string(token.token_type) << "; Value: " << token.value << "; Line: " << token.line_number << std::endl;
 }
 

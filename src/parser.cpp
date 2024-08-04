@@ -11,13 +11,196 @@
 // @CHECK: Don't Consume ';' at end of expression
 // @TODO: Implement Error checking
 // @TODO: Add a ret instruction for void functions, to avoid seg fault on pass run
+// @TODO: Implement Error management
 
+// Code Generator
 cCodeGenerator::cCodeGenerator() {
     this->m_Context = std::make_unique<llvm::LLVMContext>();
     this->m_Module = std::make_unique<llvm::Module>("JIT", *m_Context);
 
     this->m_Builder = std::make_unique<llvm::IRBuilder<>>(*m_Context);
 }
+
+// Expressions
+
+NumberExprAST::NumberExprAST(int value) : m_value(value) {
+
+}
+
+llvm::Value* NumberExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    // return llvm::ConstantInt::get(*code_generator->m_Context, llvm::APInt(this->m_value));
+    return llvm::ConstantFP::get(*code_generator->m_Context, llvm::APFloat(this->m_value));
+}
+
+// Variable Expression AST
+
+VariableExprAST::VariableExprAST(const std::string& name) : m_name(name) {
+
+}
+
+const std::string& VariableExprAST::get_name() { return m_name; }
+
+llvm::Value* VariableExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    llvm::Value* value = nullptr;
+    if ((value = code_generator->m_ArgumentsValues[this->m_name])) { return value; }
+    else if ((value = code_generator->m_NamedValues[this->m_name])) { return value; }
+    else {
+        // Error
+        std::cerr << "Error variable " << this->m_name << " not found" << std::endl;
+        return nullptr;
+    }
+}
+
+// Binary Expr AST
+BinaryExprAST::BinaryExprAST(char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs) :
+    m_op(op), m_lhs(std::move(lhs)), m_rhs(std::move(rhs)) {}   
+
+llvm::Value* BinaryExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    llvm::Value* l = this->m_lhs->codegen(code_generator);
+    llvm::Value* r = this->m_rhs->codegen(code_generator);
+
+    if (!l || !r) { return nullptr; }
+    switch (this->m_op) {
+    case '+':
+        return code_generator->m_Builder->CreateFAdd(l, r, "addtmp");
+    case '-':
+        return code_generator->m_Builder->CreateFSub(l, r, "subtmp");
+    case '*':
+        return code_generator->m_Builder->CreateFMul(l, r, "multmp");
+    // case '<':
+    //     l = code_generator->m_Builder->CreateFCmpULT(l, r, "cmptmp");
+    //     return code_generator->m_Builder->CreateUIToFP(l, llvm::Type::getDoubleTy(g_code_generator->m_Context), "booltmp");
+    default:
+        // Error
+        std::cerr << "Error " << std::endl;
+        return nullptr;    
+    }
+}
+
+// Return Expr AST
+ReturnExprAST::ReturnExprAST(std::unique_ptr<ExprAST> expression) : m_expression(std::move(expression)) {}
+llvm::Value* ReturnExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    if (this->m_expression) { return this->m_expression->codegen(code_generator); }
+    return nullptr;
+}
+
+// Function Parameter AST
+
+
+FunctionParameterAST::FunctionParameterAST(const std::string& param_name, const std::string& param_type): m_param_name(param_name), m_param_type(param_type) {}
+
+const std::string& FunctionParameterAST::get_param_name() { return m_param_name; }
+const std::string& FunctionParameterAST::get_param_type() { return m_param_type; }
+
+// Functio ndefinition AST
+
+
+FunctionDefinitionAST::FunctionDefinitionAST(const std::string& function_name, std::vector<std::unique_ptr<FunctionParameterAST>> parameters, const std::string& return_type, std::vector<std::unique_ptr<ExprAST>> function_body) : m_function_name(function_name), m_parameters(std::move(parameters)), m_return_type(return_type), m_function_body(std::move(function_body)) {}
+
+const std::string& FunctionDefinitionAST::get_function_name() { return m_function_name; }
+
+llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    std::vector<llvm::Type*> doubles(this->m_parameters.size(),
+                                llvm::Type::getDoubleTy(*code_generator->m_Context));
+
+    // Construct a function type
+    // @TODO: Check if can be changed for the new type system
+    llvm::FunctionType* func_type = llvm::FunctionType::get(llvm::Type::getDoubleTy(*code_generator->m_Context), doubles, false);
+    llvm::Function* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, this->m_function_name, code_generator->m_Module.get());
+
+    code_generator->m_ArgumentsValues.clear();
+    unsigned index = 0;
+    for (auto& arg : func->args()) {
+        arg.setName(this->m_parameters[index++]->get_param_name()); 
+        std::cout << "Adding parameter: " << std::string(arg.getName()) << std::endl;
+        code_generator->m_ArgumentsValues[std::string(arg.getName())] = &arg;
+    }
+
+    if (!func) { return nullptr; }
+
+    llvm::BasicBlock* bb = llvm::BasicBlock::Create(*code_generator->m_Context, "entry", func);
+    code_generator->m_Builder->SetInsertPoint(bb);
+
+    // code_generator->m_NamedValues.clear();
+    llvm::Value* value;
+    for (auto& expr : this->m_function_body) {
+        value = expr->codegen(code_generator);
+        if (dynamic_cast<ReturnExprAST*>(expr.get())) {
+            code_generator->m_Builder->CreateRet(value);
+            break;
+        }
+        // @TODO: On Error reading function body, remove function
+        // func->eraseFromParent();
+    }
+
+    llvm::verifyFunction(*func);
+    return func;
+}
+
+
+// Variable Declaration Expression
+
+VariableDeclarationExprAST::VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(nullptr) {}
+
+VariableDeclarationExprAST::VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type, std::unique_ptr<ExprAST> expression) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(std::move(expression)) {}
+
+const std::string& VariableDeclarationExprAST::get_variable_name() { return m_variable_name; }
+const std::string& VariableDeclarationExprAST::get_variable_type() { return m_variable_type; }
+
+llvm::Value* VariableDeclarationExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    llvm::Value* value = nullptr;
+    if (this->m_expression) { value = this->m_expression->codegen(code_generator); }
+    return code_generator->m_NamedValues[this->m_variable_name] = value;
+}
+
+// Call Expression AST
+CallExprAST::CallExprAST(const std::string& callee, std::vector<std::unique_ptr<ExprAST>> args) :
+    m_callee(callee), m_args(std::move(args)) {}
+
+llvm::Value* CallExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    llvm::Function* callee_f = code_generator->m_Module->getFunction(this->m_callee);
+    if (!callee_f) {
+        // Error
+        std::cerr << "Unknown function referenced" << std::endl;
+        return nullptr;
+    }
+
+    if (callee_f->arg_size() != this->m_args.size()) {
+        // Error
+        std::cerr << "Incorrect number of arguments" << std::endl;
+        return nullptr;
+    }
+
+    std::vector<llvm::Value*> args_v;
+    for (unsigned i = 0, e = this->m_args.size(); i != e; ++i) {
+        args_v.push_back(this->m_args[i]->codegen(code_generator));
+        if (!args_v.back()) { return nullptr; }
+    }
+
+    return code_generator->m_Builder->CreateCall(callee_f, args_v, "calltmp");
+}
+
+// Assignment Expr AST
+AssignmentExprAST::AssignmentExprAST(const std::string& variable, std::unique_ptr<ExprAST> rhs) : m_variable(variable), m_rhs(std::move(rhs)) {}
+const std::string& AssignmentExprAST::get_variable_name() { return m_variable; }
+
+llvm::Value* AssignmentExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    llvm::Value* value = this->m_rhs->codegen(code_generator);
+    return code_generator->m_NamedValues[this->m_variable] = value;
+}
+
+// Parser
+cParser::cParser(std::vector<sToken> tokens) : m_code_generator(std::make_shared<cCodeGenerator>()),
+    m_tokens(std::move(tokens)), m_current_index(0) {}
+
+sToken cParser::get_next_token() {
+    return this->m_current_token = this->m_tokens[this->m_current_index++];
+}
+
+const sToken& cParser::peek_next_token() {
+    return this->m_tokens[this->m_current_index];
+}
+
 
 void cParser::emit_object_code(std::string object_file_name) {
     // Initialize the target registry etc.
@@ -63,7 +246,6 @@ void cParser::emit_object_code(std::string object_file_name) {
         llvm::errs() << "TheTargetMachine can't emit a file of this type";
         exit(1);
     }
-    std::cout << "Add Passes to emit File" << std::endl;
 
     pass.run(*this->m_code_generator->m_Module);
     dest.flush();
@@ -71,88 +253,6 @@ void cParser::emit_object_code(std::string object_file_name) {
     llvm::outs() << "Wrote " << object_file_name << "\n";
 }
 
-llvm::Value* NumberExprAST::codegen(cCodeGenerator* code_generator) {
-    // return llvm::ConstantInt::get(*code_generator->m_Context, llvm::APInt(this->m_value));
-    return llvm::ConstantFP::get(*code_generator->m_Context, llvm::APFloat(this->m_value));
-}
-
-llvm::Value* VariableExprAST::codegen(cCodeGenerator* code_generator) {
-    llvm::Value* value = nullptr;
-    if ((value = code_generator->m_ArgumentsValues[this->m_name])) { return value; }
-    else if ((value = code_generator->m_NamedValues[this->m_name])) { return value; }
-    else {
-        // Error
-        std::cerr << "Error variable " << this->m_name << " not found" << std::endl;
-        return nullptr;
-    }
-}
-
-llvm::Value* BinaryExprAST::codegen(cCodeGenerator* code_generator) {
-    llvm::Value* l = this->m_lhs->codegen(code_generator);
-    llvm::Value* r = this->m_rhs->codegen(code_generator);
-
-    if (!l || !r) { return nullptr; }
-    switch (this->m_op) {
-    case '+':
-        return code_generator->m_Builder->CreateFAdd(l, r, "addtmp");
-    case '-':
-        return code_generator->m_Builder->CreateFSub(l, r, "subtmp");
-    case '*':
-        return code_generator->m_Builder->CreateFMul(l, r, "multmp");
-    // case '<':
-    //     l = code_generator->m_Builder->CreateFCmpULT(l, r, "cmptmp");
-    //     return code_generator->m_Builder->CreateUIToFP(l, llvm::Type::getDoubleTy(g_code_generator->m_Context), "booltmp");
-    default:
-        // Error
-        std::cerr << "Error " << std::endl;
-        return nullptr;    
-    }
-}
-
-llvm::Value* CallExprAST::codegen(cCodeGenerator* code_generator) {
-    llvm::Function* callee_f = code_generator->m_Module->getFunction(this->m_callee);
-    if (!callee_f) {
-        // Error
-        std::cerr << "Unknown function referenced" << std::endl;
-        return nullptr;
-    }
-
-    if (callee_f->arg_size() != this->m_args.size()) {
-        // Error
-        std::cerr << "Incorrect number of arguments" << std::endl;
-        return nullptr;
-    }
-
-    std::vector<llvm::Value*> args_v;
-    for (unsigned i = 0, e = this->m_args.size(); i != e; ++i) {
-        args_v.push_back(this->m_args[i]->codegen(code_generator));
-        if (!args_v.back()) { return nullptr; }
-    }
-
-    return code_generator->m_Builder->CreateCall(callee_f, args_v, "calltmp");
-}
-
-llvm::Value* VariableDeclarationExprAST::codegen(cCodeGenerator* code_generator) {
-    llvm::Value* value = nullptr;
-    if (this->m_expression) { value = this->m_expression->codegen(code_generator); }
-    return code_generator->m_NamedValues[this->m_variable_name] = value;
-}
-
-llvm::Value* AssignmentExprAST::codegen(cCodeGenerator* code_generator) {
-    llvm::Value* value = this->m_rhs->codegen(code_generator);
-    return code_generator->m_NamedValues[this->m_variable] = value;
-}
-
-
-
-// @TODO: Implement Error management
-sToken cParser::get_next_token() {
-    return this->m_current_token = this->m_tokens[this->m_current_index++];
-}
-
-const sToken& cParser::peek_next_token() {
-    return this->m_tokens[this->m_current_index];
-}
 
 std::unique_ptr<ExprAST> cParser::parse_number_expr() {
     sToken peeked_token = this->peek_next_token();
@@ -305,11 +405,6 @@ std::unique_ptr<ExprAST> cParser::parse_expression() {
     auto lhs = this->parse_primary();
     if (!lhs) 
         return nullptr;
-
-    // @TODO: Remove after rewriting parse binop 
-    // sToken peeked_token = this->peek_next_token();
-    // std::cout << "Token After primary expression: " << peeked_token.value << std::endl;
-
     return this->parse_binop_expression(0, std::move(lhs));
 }
 
@@ -350,49 +445,8 @@ std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
     return std::make_unique<FunctionParameterAST>(param_name, param_type);
 }
 
-llvm::Value* ReturnExprAST::codegen(cCodeGenerator* code_generator) {
-    if (this->m_expression) { return this->m_expression->codegen(code_generator); }
-    return nullptr;
-}
 
 
-llvm::Function* FunctionDefinitionAST::codegen(cCodeGenerator* code_generator) {
-    std::vector<llvm::Type*> doubles(this->m_parameters.size(),
-                                llvm::Type::getDoubleTy(*code_generator->m_Context));
-
-    // Construct a function type
-    // @TODO: Check if can be changed for the new type system
-    llvm::FunctionType* func_type = llvm::FunctionType::get(llvm::Type::getDoubleTy(*code_generator->m_Context), doubles, false);
-    llvm::Function* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, this->m_function_name, code_generator->m_Module.get());
-
-    code_generator->m_ArgumentsValues.clear();
-    unsigned index = 0;
-    for (auto& arg : func->args()) {
-        arg.setName(this->m_parameters[index++]->get_param_name()); 
-        std::cout << "Adding parameter: " << std::string(arg.getName()) << std::endl;
-        code_generator->m_ArgumentsValues[std::string(arg.getName())] = &arg;
-    }
-
-    if (!func) { return nullptr; }
-
-    llvm::BasicBlock* bb = llvm::BasicBlock::Create(*code_generator->m_Context, "entry", func);
-    code_generator->m_Builder->SetInsertPoint(bb);
-
-    // code_generator->m_NamedValues.clear();
-    llvm::Value* value;
-    for (auto& expr : this->m_function_body) {
-        value = expr->codegen(code_generator);
-        if (dynamic_cast<ReturnExprAST*>(expr.get())) {
-            code_generator->m_Builder->CreateRet(value);
-            break;
-        }
-        // @TODO: On Error reading function body, remove function
-        // func->eraseFromParent();
-    }
-
-    llvm::verifyFunction(*func);
-    return func;
-}
 
 // Parse function definition
 // func identifier(arg1, arg2, ...) {
@@ -483,15 +537,7 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         peeked_token = this->peek_next_token();
 
         this->get_next_token(); // Consume ';'
-
         if (!expression) { std::cout << "Got no expression\n"; break; }
-
-        // @CHECK: Code generation
-        // @TODO: Needs to be removed and replaced by FunctionDefinitionAST::codegen(cCodeGenerator* code_generator)
-        // llvm::Value* value = expression->codegen(code_generator);
-        // if (value) { value->print(llvm::errs()); std::cout << std::endl; }
-        // else { std::cout << ">>>>>>>> No Value" << std::endl; }
-
         fn_body.push_back(std::move(expression));
     }
 

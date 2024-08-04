@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cctype>
-#include <cstdio>
 #include <iostream>
 
 #include <string>
@@ -39,7 +37,9 @@ std::string get_token_type_string(eTokenType token_type);
 struct sToken {
     eTokenType token_type;   
     std::string value;
+    int line_number;
 };
+
 
 class cLexer {
 public:
@@ -57,5 +57,6 @@ private:
     std::string m_input_str;
     int m_current_pos;
     std::vector<sToken> m_tokens;
+    int m_current_line_count;
 };
 
