@@ -9,6 +9,7 @@
 */
 
 // @CHECK: Don't Consume ';' at end of expression
+// @TODO: Implement Error checking
 
 
 
@@ -24,12 +25,14 @@ llvm::Value* NumberExprAST::codegen() {
 }
 
 llvm::Value* VariableExprAST::codegen() {
-    llvm::Value* value = NamedValues[this->m_name];
-    if (!value) {
+    llvm::Value* value = nullptr;
+    if ((value = ArgumentsValues[this->m_name])) { return value; }
+    else if ((value = NamedValues[this->m_name])) { return value; }
+    else {
         // Error
-        std::cerr << "Error variable not found" << std::endl;
+        std::cerr << "Error variable " << this->m_name << " not found" << std::endl;
+        return nullptr;
     }
-    return value;
 }
 
 llvm::Value* BinaryExprAST::codegen() {
@@ -239,12 +242,11 @@ std::unique_ptr<ExprAST> cParser::parse_binop_expression(int expr_prec, std::uni
     }
 }
 
-std::unique_ptr<ExprAST> cParser::parse_return_expr() {
-    std::cout << "Parse return expr" << std::endl;
+std::unique_ptr<ReturnExprAST> cParser::parse_return_expr() {
     this->get_next_token(); // Consume 'return'
     auto final_expr = this->parse_expression();
-    // @TODO: Code generation
-    return final_expr;
+
+    return std::make_unique<ReturnExprAST>(std::move(final_expr));
 }
 
 std::unique_ptr<ExprAST> cParser::parse_expression() {
@@ -296,12 +298,15 @@ std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
     return std::make_unique<FunctionParameterAST>(param_name, param_type);
 }
 
+llvm::Value* ReturnExprAST::codegen() {
+    if (this->m_expression) { return this->m_expression->codegen(); }
+    return nullptr;
+}
 
 
 llvm::Function* FunctionDefinitionAST::codegen() {
     std::vector<llvm::Type*> doubles(this->m_parameters.size(),
                                 llvm::Type::getDoubleTy(*TheContext));
-
 
     // Construct a function type
     // @TODO: Check if can be changed for the new type system
@@ -309,8 +314,13 @@ llvm::Function* FunctionDefinitionAST::codegen() {
 
     llvm::Function* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, this->m_function_name, TheModule.get());
 
+    ArgumentsValues.clear();
     unsigned index = 0;
-    for (auto& arg : func->args()) { arg.setName(this->m_parameters[index++]->get_param_name()); }
+    for (auto& arg : func->args()) {
+        arg.setName(this->m_parameters[index++]->get_param_name()); 
+        std::cout << "Adding parameter: " << std::string(arg.getName()) << std::endl;
+        ArgumentsValues[std::string(arg.getName())] = &arg;
+    }
 
     if (!func) { return nullptr; }
 
@@ -321,8 +331,10 @@ llvm::Function* FunctionDefinitionAST::codegen() {
     llvm::Value* value;
     for (auto& expr : this->m_function_body) {
         value = expr->codegen();
-        // @TODO: Create ReturnExprAST and cast expr to ReturnExp to set return value
-        // if (expr is ReturnExprAST) Builder->CreateRet(value); break;
+        if (dynamic_cast<ReturnExprAST*>(expr.get())) {
+            Builder->CreateRet(value);
+            break;
+        }
         // @TODO: On Error reading function body, remove function
         // func->eraseFromParent();
     }

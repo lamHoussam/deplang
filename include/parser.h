@@ -26,6 +26,7 @@ static std::unique_ptr<llvm::LLVMContext> TheContext;
 static std::unique_ptr<llvm::IRBuilder<>> Builder;
 static std::unique_ptr<llvm::Module> TheModule;
 static std::map<std::string, llvm::Value*> NamedValues;
+static std::map<std::string, llvm::Value*> ArgumentsValues;
 
 void initialize_module();
 
@@ -69,6 +70,14 @@ private:
     std::unique_ptr<ExprAST> m_lhs, m_rhs;
 };
 
+class ReturnExprAST : public ExprAST {
+public:
+    ReturnExprAST(std::unique_ptr<ExprAST> expression) : m_expression(std::move(expression)) {}
+    llvm::Value* codegen() override;
+private:
+    std::unique_ptr<ExprAST> m_expression;
+};
+
 
 // Function parameter expression
 // function_parameter := identifier ":" identifier
@@ -107,16 +116,9 @@ private:
 // @Check: Does it need to be an ExprAST
 class VariableDeclarationExprAST: public ExprAST {
 public:
-    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(nullptr) {
-        std::cout << "Declared variable: " << this->m_variable_name << std::endl;
-        NamedValues[this->m_variable_name] = llvm::ConstantFP::get(*TheContext, llvm::APFloat(0.0f));
-    }
+    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(nullptr) {}
 
-    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type, std::unique_ptr<ExprAST> expression) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(std::move(expression)) {
-
-        std::cout << "Declared variable: " << this->m_variable_name << std::endl;
-        NamedValues[this->m_variable_name] = m_expression->codegen();
-    }
+    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type, std::unique_ptr<ExprAST> expression) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(std::move(expression)) {}
 
     inline const std::string& get_variable_name() { return m_variable_name; }
     inline const std::string& get_variable_type() { return m_variable_type; }
@@ -197,7 +199,7 @@ public:
     std::unique_ptr<ExprAST> parse_expression();
     std::unique_ptr<ExprAST> parse_identifier_expr();
     std::unique_ptr<ExprAST> parse_primary();
-    std::unique_ptr<ExprAST> parse_return_expr();
+    std::unique_ptr<ReturnExprAST> parse_return_expr();
 
     std::unique_ptr<ExprAST> parse_binop_expression(int expr_prec, std::unique_ptr<ExprAST> lhs);
 
