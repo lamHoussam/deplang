@@ -1,39 +1,62 @@
 # pragma once
 
 #include <algorithm>
-#include <cwchar>
-#include <llvm-14/llvm/ADT/APFloat.h>
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
+
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
+
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
+// #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
 
+#include "llvm/MC/TargetRegistry.h"
+
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/raw_ostream.h"
+
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+
+#include "llvm/Support/Host.h"
+
+
 #include "../include/lexer.h"
 
-static std::unique_ptr<llvm::LLVMContext> TheContext;
-static std::unique_ptr<llvm::IRBuilder<>> Builder;
-static std::unique_ptr<llvm::Module> TheModule;
-static std::map<std::string, llvm::Value*> NamedValues;
-static std::map<std::string, llvm::Value*> ArgumentsValues;
+class cCodeGenerator {
+public:
+    cCodeGenerator();
 
-void initialize_module();
+    std::unique_ptr<llvm::LLVMContext> m_Context;
+    std::unique_ptr<llvm::IRBuilder<>> m_Builder;
+
+    std::unique_ptr<llvm::Module> m_Module;
+
+    std::map<std::string, llvm::Value*> m_NamedValues;
+    std::map<std::string, llvm::Value*> m_ArgumentsValues;
+
+    ~cCodeGenerator() = default;
+private:
+};
 
 class ExprAST {
 public:
     virtual ~ExprAST() = default;
-    virtual llvm::Value* codegen() = 0;
+    virtual llvm::Value* codegen(cCodeGenerator* code_generator) = 0;
 };
 
 
@@ -41,7 +64,7 @@ public:
 class NumberExprAST : public ExprAST {
 public:
     NumberExprAST(int value) : m_value(value) {}
-    llvm::Value* codegen() override;
+    llvm::Value* codegen(cCodeGenerator* code_generator) override;
 
 private:
     float m_value;
@@ -53,7 +76,7 @@ public:
     VariableExprAST(const std::string& name) : m_name(name) {}
 
     const std::string& get_name() { return m_name; }
-    llvm::Value* codegen() override;
+    llvm::Value* codegen(cCodeGenerator* code_generator) override;
 private:
     std::string m_name;
 };
@@ -64,7 +87,7 @@ public:
     BinaryExprAST(char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs) :
         m_op(op), m_lhs(std::move(lhs)), m_rhs(std::move(rhs)) {}   
 
-    llvm::Value* codegen() override;
+    llvm::Value* codegen(cCodeGenerator* code_generator) override;
 private:
     char m_op;
     std::unique_ptr<ExprAST> m_lhs, m_rhs;
@@ -73,7 +96,7 @@ private:
 class ReturnExprAST : public ExprAST {
 public:
     ReturnExprAST(std::unique_ptr<ExprAST> expression) : m_expression(std::move(expression)) {}
-    llvm::Value* codegen() override;
+    llvm::Value* codegen(cCodeGenerator* code_generator) override;
 private:
     std::unique_ptr<ExprAST> m_expression;
 };
@@ -102,7 +125,7 @@ public:
 
     inline const std::string& get_function_name() { return m_function_name; }
 
-    llvm::Function* codegen();
+    llvm::Function* codegen(cCodeGenerator* code_generator);
 
 private:
     std::string m_function_name;
@@ -123,7 +146,7 @@ public:
     inline const std::string& get_variable_name() { return m_variable_name; }
     inline const std::string& get_variable_type() { return m_variable_type; }
 
-    llvm::Value* codegen() override;
+    llvm::Value* codegen(cCodeGenerator* code_generator) override;
 
 private:
     std::string m_variable_name, m_variable_type;
@@ -137,7 +160,7 @@ public:
     CallExprAST(const std::string& callee, std::vector<std::unique_ptr<ExprAST>> args) : 
         m_callee(callee), m_args(std::move(args)) {}
 
-    llvm::Value* codegen() override;
+    llvm::Value* codegen(cCodeGenerator* code_generator) override;
 
 private:
     std::string m_callee;
@@ -152,7 +175,7 @@ public:
     AssignmentExprAST(const std::string& variable, std::unique_ptr<ExprAST> rhs) : m_variable(variable), m_rhs(std::move(rhs)) {}
 
     const std::string& get_variable_name() { return m_variable; }
-    llvm::Value* codegen() override;
+    llvm::Value* codegen(cCodeGenerator* code_generator) override;
 
 private:
     std::string m_variable;
@@ -188,7 +211,7 @@ private:
 class cParser {
 public:
     cParser(std::vector<sToken> tokens) : m_tokens(std::move(tokens)), m_current_index(0) {
-        initialize_module();
+        m_code_generator = new cCodeGenerator();
     }
 
     sToken get_next_token();
@@ -210,7 +233,10 @@ public:
 
     int get_binop_precedence(char op);
 
+    void emit_object_code(std::string file_name);
+
     void parse();
+    cCodeGenerator* m_code_generator;
 
     ~cParser() = default;
 
@@ -218,5 +244,11 @@ private:
     std::vector<sToken> m_tokens;
     sToken m_current_token;
     int m_current_index;
+
+    std::string m_target_triple;
+    llvm::TargetMachine* m_target_machine;
+
 };
+
+
 

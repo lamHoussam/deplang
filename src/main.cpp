@@ -64,5 +64,15 @@ int main (int argc, char *argv[]) {
 
     std::cout << "Elapsed time: " << t_ns << " ns" << std::endl;
 
+    std::cout << std::endl;
+
+    std::cout << "Generated code" << std::endl;
+    parser->m_code_generator->m_Module->print(llvm::errs(), nullptr);
+
+    std::cout << std::endl;
+    std::cout << std::endl;
+
+    parser->emit_object_code("obj/output.o");
+
     return 0;
 }
