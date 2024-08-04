@@ -150,9 +150,7 @@ std::unique_ptr<ExprAST> cParser::parse_identifier_expr() {
         return std::make_unique<VariableExprAST>(identifier_name);
 
     this->get_next_token(); // Consume '('
-
     peeked_token = this->peek_next_token();
-    std::cout << "Token found here: " << peeked_token.value << std::endl;
 
     // Function call
     std::vector<std::unique_ptr<ExprAST>> args;
@@ -313,7 +311,23 @@ llvm::Function* FunctionDefinitionAST::codegen() {
 
     unsigned index = 0;
     for (auto& arg : func->args()) { arg.setName(this->m_parameters[index++]->get_param_name()); }
-    
+
+    if (!func) { return nullptr; }
+
+    llvm::BasicBlock* bb = llvm::BasicBlock::Create(*TheContext, "entry", func);
+    Builder->SetInsertPoint(bb);
+
+    // NamedValues.clear();
+    llvm::Value* value;
+    for (auto& expr : this->m_function_body) {
+        value = expr->codegen();
+        // @TODO: Create ReturnExprAST and cast expr to ReturnExp to set return value
+        // if (expr is ReturnExprAST) Builder->CreateRet(value); break;
+        // @TODO: On Error reading function body, remove function
+        // func->eraseFromParent();
+    }
+
+    llvm::verifyFunction(*func);
     return func;
 }
 
@@ -410,9 +424,10 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         if (!expression) { std::cout << "Got no expression\n"; break; }
 
         // @CHECK: Code generation
-        llvm::Value* value = expression->codegen();
-        if (value) { value->print(llvm::errs()); std::cout << std::endl; } 
-        else { std::cout << ">>>>>>>> No Value" << std::endl; }
+        // @TODO: Needs to be removed and replaced by FunctionDefinitionAST::codegen()
+        // llvm::Value* value = expression->codegen();
+        // if (value) { value->print(llvm::errs()); std::cout << std::endl; }
+        // else { std::cout << ">>>>>>>> No Value" << std::endl; }
 
         fn_body.push_back(std::move(expression));
     }
