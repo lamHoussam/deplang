@@ -142,6 +142,8 @@ sToken cLexer::get_next_token() {
     case '-':
     case '*':
     case '/':
+    case '<':
+    case '>':
         final_token.token_type = TOK_OP;
         break;
     case EOF:

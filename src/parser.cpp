@@ -62,11 +62,11 @@ llvm::Value* BinaryExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generat
         return code_generator->m_Builder->CreateFSub(l, r, "subtmp");
     case '*':
         return code_generator->m_Builder->CreateFMul(l, r, "multmp");
-    // case '<':
-    //     l = code_generator->m_Builder->CreateFCmpULT(l, r, "cmptmp");
-    //     return code_generator->m_Builder->CreateUIToFP(l, llvm::Type::getDoubleTy(g_code_generator->m_Context), "booltmp");
+    case '<':
+        l = code_generator->m_Builder->CreateFCmpULT(l, r, "cmptmp");
+        return code_generator->m_Builder->CreateUIToFP(l, llvm::Type::getInt1Ty(*code_generator->m_Context), "booltmp");
     default:
-        DEPLANG_PARSER_ERROR("Expected Operator");
+        DEPLANG_PARSER_ERROR("Expected Operator, got " << this->m_op);
         return nullptr;
     }
 }
@@ -587,6 +587,7 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
 
 int cParser::get_binop_precedence(char op) {
     switch (op) {
+        case '>':
         case '<': return 10;
         case '+':
         case '-': return 20;
