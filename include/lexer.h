@@ -30,6 +30,8 @@ enum eTokenType {
 
     TOK_VARDECL       = -16,
     TOK_RETURN        = -17,
+
+    TOK_COMMENT       = -18,
 };
 
 std::string get_token_type_string(eTokenType token_type);

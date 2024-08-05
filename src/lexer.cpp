@@ -33,6 +33,8 @@ std::string get_token_type_string(eTokenType token_type) {
         case TOK_VARDECL:       return "VARDECL";
         case TOK_RETURN:        return "RETURN";
 
+        case TOK_COMMENT:       return "COMMENT";
+
         case TOK_UNKNOWN:
         default:                return "UNKNOWN";
     }
@@ -55,6 +57,14 @@ sToken cLexer::get_next_token() {
     }
 
     final_token.line_number = this->m_current_line_count;
+
+    if (last_char == '/' && this->peek_char() == '/') {
+        while ((last_char = this->consume_char()) != '\n') {
+            final_token.value += last_char;
+        }
+        final_token.token_type = TOK_COMMENT;
+        return final_token;
+    }
 
     // @TODO: Switch to switch statement
     // this->consume_char();
