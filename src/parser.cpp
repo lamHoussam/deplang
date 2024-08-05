@@ -47,7 +47,7 @@ llvm::Value* VariableExprAST::codegen(std::shared_ptr<cCodeGenerator> code_gener
 }
 
 // Binary Expr AST
-BinaryExprAST::BinaryExprAST(char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs) :
+BinaryExprAST::BinaryExprAST(std::string op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs) :
     m_op(op), m_lhs(std::move(lhs)), m_rhs(std::move(rhs)) {}   
 
 llvm::Value* BinaryExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
@@ -55,17 +55,19 @@ llvm::Value* BinaryExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generat
     llvm::Value* r = this->m_rhs->codegen(code_generator);
 
     if (!l || !r) { return nullptr; }
-    switch (this->m_op) {
-    case '+':
-        return code_generator->m_Builder->CreateFAdd(l, r, "addtmp");
-    case '-':
-        return code_generator->m_Builder->CreateFSub(l, r, "subtmp");
-    case '*':
-        return code_generator->m_Builder->CreateFMul(l, r, "multmp");
-    case '<':
+
+    if (this->m_op == "+") { return code_generator->m_Builder->CreateFAdd(l, r, "addtmp"); }
+    else if (this->m_op == "-") { return code_generator->m_Builder->CreateFSub(l, r, "subtmp"); }
+    else if (this->m_op == "*") { return code_generator->m_Builder->CreateFMul(l, r, "multmp"); }
+    else if (this->m_op == "<") {
         l = code_generator->m_Builder->CreateFCmpULT(l, r, "cmptmp");
         return code_generator->m_Builder->CreateUIToFP(l, llvm::Type::getInt1Ty(*code_generator->m_Context), "booltmp");
-    default:
+    }
+    else if (this->m_op == ">") {
+        l = code_generator->m_Builder->CreateFCmpULT(r, l, "cmptmp");
+        return code_generator->m_Builder->CreateUIToFP(l, llvm::Type::getInt1Ty(*code_generator->m_Context), "booltmp");
+    }
+    else {
         DEPLANG_PARSER_ERROR("Expected Operator, got " << this->m_op);
         return nullptr;
     }
@@ -365,7 +367,7 @@ std::unique_ptr<ExprAST> cParser::parse_binop_expression(int expr_prec, std::uni
     while (true) {
         peeked_token = this->peek_next_token();
         if (peeked_token.token_type == TOK_EOF) { return nullptr; }
-        int op = peeked_token.value[0];
+        std::string op = peeked_token.value;
         int tok_prec = this->get_binop_precedence(op);
 
         if (tok_prec < expr_prec) { return lhs; }
@@ -375,8 +377,7 @@ std::unique_ptr<ExprAST> cParser::parse_binop_expression(int expr_prec, std::uni
         if (!rhs) { return nullptr; }
 
         peeked_token = this->peek_next_token();
-        int next_op = peeked_token.value[0];
-        int next_prec = this->get_binop_precedence(next_op);
+        int next_prec = this->get_binop_precedence(peeked_token.value);
         if (tok_prec < next_prec) {
             rhs = this->parse_binop_expression(tok_prec + 1, std::move(rhs));
             if (!rhs) { return nullptr; }
@@ -585,15 +586,11 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
     return nullptr;
 }
 
-int cParser::get_binop_precedence(char op) {
-    switch (op) {
-        case '>':
-        case '<': return 10;
-        case '+':
-        case '-': return 20;
-        case '*': return 30;
-        default:  return -1;
-    }
+int cParser::get_binop_precedence(std::string op) {
+    if (op == ">" || op == "<" || op == ">=" || op == "<=") { return 10; }
+    else if (op == "+" || op == "-") { return 20; }
+    else if (op == "*" || op == "/") { return 30; }
+    else { return -1; }
 }
 
 void cParser::parse() {

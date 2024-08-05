@@ -86,10 +86,10 @@ private:
 // Expr Op Expr
 class BinaryExprAST : public ExprAST {
 public:
-    BinaryExprAST(char op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs);
+    BinaryExprAST(std::string op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs);
     llvm::Value* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
 private:
-    char m_op;
+    std::string m_op;
     std::unique_ptr<ExprAST> m_lhs, m_rhs;
 };
 
@@ -200,7 +200,7 @@ public:
 
     std::unique_ptr<VariableDeclarationExprAST> parse_variable_declaration();
 
-    int get_binop_precedence(char op);
+    int get_binop_precedence(std::string op);
     void emit_object_code(std::string file_name);
 
     void parse();
