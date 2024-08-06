@@ -1,4 +1,5 @@
 #include "../include/parser.h"
+#include <llvm-14/llvm/IR/LLVMContext.h>
 
 /**
 * Function call
@@ -9,17 +10,28 @@
 */
 
 // @CHECK: Don't Consume ';' at end of expression
-// @TODO: Implement Error checking
 // @TODO: Add a ret instruction for void functions, to avoid seg fault on pass run
-// @TODO: Implement Error management
+// @TODO: Implement Better Error management
 
 // Code Generator
 cCodeGenerator::cCodeGenerator() {
     this->m_Context = std::make_unique<llvm::LLVMContext>();
-    this->m_Module = std::make_unique<llvm::Module>("JIT", *m_Context);
+    this->m_Module = std::make_unique<llvm::Module>("DepLangModule", *m_Context);
 
     this->m_Builder = std::make_unique<llvm::IRBuilder<>>(*m_Context);
 }
+
+llvm::Type* get_llvm_type(const ePrimitiveType& type, llvm::LLVMContext& context) {
+    switch (type) {
+    case TYPE_INT:    return llvm::Type::getInt32Ty(context);
+    case TYPE_BOOL:   return llvm::Type::getInt1Ty(context);
+    case TYPE_FLOAT:  return llvm::Type::getFloatTy(context);
+    }
+
+    return nullptr;
+}
+
+
 
 // Expressions
 
@@ -45,6 +57,20 @@ llvm::Value* VariableExprAST::codegen(std::shared_ptr<cCodeGenerator> code_gener
         return nullptr;
     }
 }
+
+
+TypeExrAST::TypeExrAST(const std::string& name) {
+    if (name == "int") { this->m_prim_type = TYPE_INT; }
+    else if (name == "bool") { this->m_prim_type = TYPE_BOOL; }
+    else if (name == "float") { this->m_prim_type = TYPE_FLOAT; }
+}
+
+const ePrimitiveType& TypeExrAST::get_primitive_type() { return this->m_prim_type; }
+
+llvm::Value* TypeExrAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    return nullptr;
+}
+
 
 // Binary Expr AST
 BinaryExprAST::BinaryExprAST(std::string op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs) :
@@ -83,25 +109,37 @@ llvm::Value* ReturnExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generat
 // Function Parameter AST
 
 
-FunctionParameterAST::FunctionParameterAST(const std::string& param_name, const std::string& param_type): m_param_name(param_name), m_param_type(param_type) {}
+FunctionParameterAST::FunctionParameterAST(const std::string& param_name, std::unique_ptr<TypeExrAST> param_type): m_param_name(param_name), m_type_expr(std::move(param_type)) {}
 
 const std::string& FunctionParameterAST::get_param_name() { return m_param_name; }
-const std::string& FunctionParameterAST::get_param_type() { return m_param_type; }
+const ePrimitiveType& FunctionParameterAST::get_primitive_type() { return m_type_expr->get_primitive_type(); }
 
 // Functio ndefinition AST
 
 
-FunctionDefinitionAST::FunctionDefinitionAST(const std::string& function_name, std::vector<std::unique_ptr<FunctionParameterAST>> parameters, const std::string& return_type, std::vector<std::unique_ptr<ExprAST>> function_body) : m_function_name(function_name), m_parameters(std::move(parameters)), m_return_type(return_type), m_function_body(std::move(function_body)) {}
+FunctionDefinitionAST::FunctionDefinitionAST(const std::string& function_name, std::vector<std::unique_ptr<FunctionParameterAST>> parameters, std::unique_ptr<TypeExrAST> return_type, std::vector<std::unique_ptr<ExprAST>> function_body) : m_function_name(function_name), m_parameters(std::move(parameters)), m_return_type(std::move(return_type)), m_function_body(std::move(function_body)) {}
 
 const std::string& FunctionDefinitionAST::get_function_name() { return m_function_name; }
 
 llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
-    std::vector<llvm::Type*> doubles(this->m_parameters.size(),
-                                llvm::Type::getDoubleTy(*code_generator->m_Context));
+    // @CHECK: possible memory leak
+    // std::vector<llvm::Type*> doubles(this->m_parameters.size(),
+    //                     llvm::Type::getDoubleTy(*code_generator->m_Context));
+
+    std::vector<llvm::Type*> param_types;
+    for (auto& param : this->m_parameters) {
+        param_types.push_back(get_llvm_type(param->get_primitive_type(), *code_generator->m_Context));
+    }
+
+    // std::vector<std::shared_ptr<llvm::Type>> doubles(this->m_parameters.size(),
+    //                 std::make_shared<llvm::Type>(llvm::Type::getDoubleTy(*code_generator->m_Context)));
+
 
     // Construct a function type
     // @TODO: Check if can be changed for the new type system
-    llvm::FunctionType* func_type = llvm::FunctionType::get(llvm::Type::getDoubleTy(*code_generator->m_Context), doubles, false);
+
+    llvm::Type* func_return_type = get_llvm_type(this->m_return_type->get_primitive_type(), *code_generator->m_Context);
+    llvm::FunctionType* func_type = llvm::FunctionType::get(func_return_type, param_types, false);
     llvm::Function* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, this->m_function_name, code_generator->m_Module.get());
 
     code_generator->m_ArgumentsValues.clear();
@@ -135,13 +173,12 @@ llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> c
 
 
 // Variable Declaration Expression
+VariableDeclarationExprAST::VariableDeclarationExprAST(const std::string& variable_name, std::unique_ptr<TypeExrAST> variable_type) : m_variable_name(variable_name), m_variable_type(std::move(variable_type)), m_expression(nullptr) {}
 
-VariableDeclarationExprAST::VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(nullptr) {}
-
-VariableDeclarationExprAST::VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type, std::unique_ptr<ExprAST> expression) : m_variable_name(variable_name), m_variable_type(variable_type), m_expression(std::move(expression)) {}
+VariableDeclarationExprAST::VariableDeclarationExprAST(const std::string& variable_name, std::unique_ptr<TypeExrAST> variable_type, std::unique_ptr<ExprAST> expression) : m_variable_name(variable_name), m_variable_type(std::move(variable_type)), m_expression(std::move(expression)) {}
 
 const std::string& VariableDeclarationExprAST::get_variable_name() { return m_variable_name; }
-const std::string& VariableDeclarationExprAST::get_variable_type() { return m_variable_type; }
+const ePrimitiveType& VariableDeclarationExprAST::get_primitive_type() { return m_variable_type->get_primitive_type(); }
 
 llvm::Value* VariableDeclarationExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     llvm::Value* value = nullptr;
@@ -188,10 +225,14 @@ cParser::cParser(std::vector<sToken> tokens) : m_code_generator(std::make_shared
     m_tokens(std::move(tokens)), m_current_index(0) {}
 
 sToken cParser::get_next_token() {
+    // while (this->m_tokens[this->m_current_index++].token_type == TOK_COMMENT);
+    // std::cout << "After Get comment: " << this->m_tokens[this->m_current_index].value << std::endl;
     return this->m_current_token = this->m_tokens[this->m_current_index++];
 }
 
 const sToken& cParser::peek_next_token() {
+    // while (this->m_tokens[this->m_current_index++].token_type == TOK_COMMENT);
+    // std::cout << "After Peek Get comment: " << this->m_tokens[this->m_current_index].value << std::endl;
     return this->m_tokens[this->m_current_index];
 }
 
@@ -431,7 +472,10 @@ std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
 
     this->get_next_token(); // Consume identifier
     std::string param_type = peeked_token.value;
-    return std::make_unique<FunctionParameterAST>(param_name, param_type);
+    
+    // @TODO: Change to parse type expression
+    auto param_type_expr = std::make_unique<TypeExrAST>(param_type);
+    return std::make_unique<FunctionParameterAST>(param_name, std::move(param_type_expr));
 }
 
 
@@ -498,7 +542,6 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         }
 
         this->get_next_token(); // Consume identifier
-
         return_type = peeked_token.value;
 
         // this->get_next_token(); // Move to the '{'
@@ -533,7 +576,9 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
 
     this->get_next_token(); // Consume last }
 
-    auto function_definition = std::make_unique<FunctionDefinitionAST>(function_name, std::move(args), return_type, std::move(fn_body));
+    // @TODO: Change
+    auto return_type_expr = std::make_unique<TypeExrAST>(return_type);
+    auto function_definition = std::make_unique<FunctionDefinitionAST>(function_name, std::move(args), std::move(return_type_expr), std::move(fn_body));
     return function_definition;
 }
 
@@ -571,7 +616,8 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
     peeked_token = this->peek_next_token();
 
     if (peeked_token.token_type == TOK_SEMICOLON) {
-        return std::make_unique<VariableDeclarationExprAST>(var_name, var_type);
+        auto var_type_expr = std::make_unique<TypeExrAST>(var_type);
+        return std::make_unique<VariableDeclarationExprAST>(var_name, std::move(var_type_expr));
     }
 
     if (peeked_token.token_type == TOK_EQUAL) {
@@ -579,7 +625,8 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
         auto expr = this->parse_expression();
         peeked_token = this->peek_next_token();
         if (peeked_token.token_type == TOK_SEMICOLON) {
-            return std::make_unique<VariableDeclarationExprAST>(var_name, var_type, std::move(expr));
+            auto var_type_expr = std::make_unique<TypeExrAST>(var_type);
+            return std::make_unique<VariableDeclarationExprAST>(var_name, std::move(var_type_expr), std::move(expr));
         }
     }
 

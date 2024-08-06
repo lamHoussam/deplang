@@ -1,6 +1,7 @@
 # pragma once
 
 #include <algorithm>
+#include <llvm-14/llvm/IR/LLVMContext.h>
 #include <map>
 #include <memory>
 #include <string>
@@ -38,6 +39,20 @@
 
 // @TODO: Change Macro
 # define DEPLANG_PARSER_ERROR(err) std::cerr << "::[Parser]::Error: " << err << std::endl
+
+
+
+// Types
+enum ePrimitiveType {
+    TYPE_INT,
+    TYPE_BOOL,
+    TYPE_FLOAT,
+};
+
+inline llvm::Type* get_llvm_type(const ePrimitiveType& type, llvm::LLVMContext& context);
+
+// @TODO: Implement
+llvm::Value* build_ir_operation(llvm::Value* l, llvm::Value* r, std::string op);
 
 
 class cCodeGenerator {
@@ -83,6 +98,25 @@ private:
     std::string m_name;
 };
 
+// Type
+class TypeExrAST : public ExprAST {
+public:
+    TypeExrAST(const std::string& name);
+
+    // @TODO: Change to real type
+    const ePrimitiveType& get_primitive_type();
+
+    llvm::Value* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
+
+private:
+    ePrimitiveType m_prim_type;
+};
+
+class BinaryTypeExprAST : public ExprAST {
+
+};
+
+
 // Expr Op Expr
 class BinaryExprAST : public ExprAST {
 public:
@@ -101,18 +135,19 @@ private:
     std::unique_ptr<ExprAST> m_expression;
 };
 
-
 // Function parameter expression
 // function_parameter := identifier ":" identifier
 class FunctionParameterAST {
 public:
-   FunctionParameterAST(const std::string& param_name, const std::string& param_type);
-
+    FunctionParameterAST(const std::string& param_name, std::unique_ptr<TypeExrAST> param_type);
     inline const std::string& get_param_name();
-    inline const std::string& get_param_type();
+    
+    // @TODO: Change type
+    inline const ePrimitiveType& get_primitive_type();
 
 private:
-    std::string m_param_name, m_param_type;
+    std::string m_param_name;
+    std::unique_ptr<TypeExrAST> m_type_expr;
 };
 
 // Function definition
@@ -121,7 +156,7 @@ private:
 // "}"
 class FunctionDefinitionAST {
 public: 
-    FunctionDefinitionAST(const std::string& function_name, std::vector<std::unique_ptr<FunctionParameterAST>> parameters, const std::string& return_type, std::vector<std::unique_ptr<ExprAST>> function_body);
+    FunctionDefinitionAST(const std::string& function_name, std::vector<std::unique_ptr<FunctionParameterAST>> parameters, std::unique_ptr<TypeExrAST> return_type, std::vector<std::unique_ptr<ExprAST>> function_body);
 
     inline const std::string& get_function_name();
 
@@ -130,7 +165,7 @@ public:
 private:
     std::string m_function_name;
     std::vector<std::unique_ptr<FunctionParameterAST>> m_parameters;
-    std::string m_return_type;
+    std::unique_ptr<TypeExrAST> m_return_type;
     std::vector<std::unique_ptr<ExprAST>> m_function_body;
 };
 
@@ -139,16 +174,19 @@ private:
 // @Check: Does it need to be an ExprAST
 class VariableDeclarationExprAST: public ExprAST {
 public:
-    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type);
-    VariableDeclarationExprAST(const std::string& variable_name, const std::string& variable_type, std::unique_ptr<ExprAST> expression);
+    VariableDeclarationExprAST(const std::string& variable_name, std::unique_ptr<TypeExrAST> variable_type);
+    VariableDeclarationExprAST(const std::string& variable_name, std::unique_ptr<TypeExrAST> variable_type, std::unique_ptr<ExprAST> expression);
 
     inline const std::string& get_variable_name();
-    inline const std::string& get_variable_type();
+
+    // @TODO: Change type
+    inline const ePrimitiveType& get_primitive_type();
 
     llvm::Value* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
 
 private:
-    std::string m_variable_name, m_variable_type;
+    std::string m_variable_name;
+    std::unique_ptr<TypeExrAST> m_variable_type;
     std::unique_ptr<ExprAST> m_expression;
 };
 
@@ -178,6 +216,10 @@ private:
     std::string m_variable;
     std::unique_ptr<ExprAST> m_rhs;
 };
+
+
+
+
 
 class cParser {
 public:

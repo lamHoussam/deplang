@@ -100,3 +100,7 @@ List{T, n}::get_element_at(i: int{(forall x: int)::(x < n)}) -> T {
 
 ```
 
+
+The first implementation of the type system will have 3 primitive types: int, bool, float, void
+The next step is to implement the following types: t1, t2 are primitive type then t1 * t2, t1 -> t2, t1 | t2 are types
+
