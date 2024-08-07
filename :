@@ -38,7 +38,8 @@ std::unique_ptr<sTypedValue> build_ir_operation(std::unique_ptr<sTypedValue> l, 
     if (l->type->get_primitive_type() != r->type->get_primitive_type()) { return nullptr; }
 
     llvm::Value* final_value = nullptr;
-    if (l->type->get_primitive_type() == TYPE_FLOAT) {
+    if (l->type->get_primitive_type() == TYPE_FLOAT || l->type->get_primitive_type() == TYPE_INT) {
+    
         if (op == "+") { final_value = code_generator->m_Builder->CreateFAdd(l->value, r->value, "addtmp"); } 
         else if (op == "-") { final_value = code_generator->m_Builder->CreateFSub(l->value, r->value, "subtmp"); }
         else if (op == "*") { final_value = code_generator->m_Builder->CreateFMul(l->value, r->value, "multmp"); }
@@ -54,24 +55,6 @@ std::unique_ptr<sTypedValue> build_ir_operation(std::unique_ptr<sTypedValue> l, 
             DEPLANG_PARSER_ERROR("Expected Operator, got " << op);
             return nullptr;
         }
-    } 
-    else if (l->type->get_primitive_type() == TYPE_INT) {
-        if (op == "+") { code_generator->m_Builder->CreateAdd(l->value, r->value, "addtmp"); } 
-        else if (op == "-") { final_value = code_generator->m_Builder->CreateSub(l->value, r->value, "subtmp"); }
-        else if (op == "*") { final_value = code_generator->m_Builder->CreateMul(l->value, r->value, "multmp"); }
-        else if (op == "<") {
-            l->value = code_generator->m_Builder->CreateICmpULT(l->value, r->value, "cmptmp");
-            final_value = code_generator->m_Builder->CreateUIToFP(l->value, llvm::Type::getInt1Ty(*code_generator->m_Context), "booltmp");
-        }
-        else if (op == ">") {
-            l->value = code_generator->m_Builder->CreateICmpULT(r->value, l->value, "cmptmp");
-            final_value = code_generator->m_Builder->CreateUIToFP(l->value, llvm::Type::getInt1Ty(*code_generator->m_Context), "booltmp");
-        }
-        else {
-            DEPLANG_PARSER_ERROR("Expected Operator, got " << op);
-            return nullptr;
-        }
-
     }
     else {
         // @TODO: Implement binary operations for bools
@@ -142,7 +125,7 @@ std::unique_ptr<sTypedValue> ReturnExprAST::codegen(std::shared_ptr<cCodeGenerat
 }
 
 // Function Parameter AST
-FunctionParameterAST::FunctionParameterAST(const std::string& param_name, std::unique_ptr<TypeExrAST> param_type): m_type_expr(std::move(param_type)), m_param_name(param_name) {}
+FunctionParameterAST::FunctionParameterAST(const std::string& param_name, std::unique_ptr<TypeExrAST> param_type): m_param_name(param_name), m_type_expr(std::move(param_type)) {}
 
 const std::string& FunctionParameterAST::get_param_name() { return m_param_name; }
 const ePrimitiveType& FunctionParameterAST::get_primitive_type() { return m_type_expr->get_primitive_type(); }
@@ -176,11 +159,10 @@ llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> c
     code_generator->m_NamedValues.clear();
     unsigned index = 0;
     for (auto& arg : func->args()) {
-        arg.setName(this->m_parameters[index]->get_param_name()); 
+        arg.setName(this->m_parameters[index++]->get_param_name()); 
         std::cout << "Adding parameter: " << std::string(arg.getName()) << std::endl;
         // @TODO: Set arg type
-        code_generator->m_NamedValues[std::string(arg.getName())] = std::make_unique<sTypedValue>(&arg, std::move(this->m_parameters[index]->m_type_expr));
-        index++;
+        code_generator->m_NamedValues[std::string(arg.getName())] = std::make_unique<sTypedValue>(&arg, std::make_unique<TypeExrAST>("float"));
     }
 
     if (!func) { return nullptr; }
