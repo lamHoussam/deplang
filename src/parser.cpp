@@ -261,14 +261,16 @@ cParser::cParser(std::vector<sToken> tokens) : m_code_generator(std::make_shared
     m_tokens(std::move(tokens)), m_current_index(0) {}
 
 sToken cParser::get_next_token() {
-    // while (this->m_tokens[this->m_current_index++].token_type == TOK_COMMENT);
-    // std::cout << "After Get comment: " << this->m_tokens[this->m_current_index].value << std::endl;
+    while (this->m_tokens[this->m_current_index].token_type == TOK_COMMENT) {
+        this->m_current_index++;
+    } 
     return this->m_current_token = this->m_tokens[this->m_current_index++];
 }
 
 const sToken& cParser::peek_next_token() {
-    // while (this->m_tokens[this->m_current_index++].token_type == TOK_COMMENT);
-    // std::cout << "After Peek Get comment: " << this->m_tokens[this->m_current_index].value << std::endl;
+    while (this->m_tokens[this->m_current_index].token_type == TOK_COMMENT) {
+        this->m_current_index++;
+    } 
     return this->m_tokens[this->m_current_index];
 }
 
