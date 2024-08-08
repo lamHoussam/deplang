@@ -12,26 +12,30 @@ enum eTokenType {
     TOK_DEF           = -3,
 
     TOK_IDENTIFIER    = -4,
-    TOK_NUMBER        = -5,
+    TOK_INTEGER       = -5,
+    TOK_FLOAT         = -6,
     
-    TOK_OP            = -6,
+    TOK_OP            = -7,
     
-    TOK_LEFTPAR       = -7,
-    TOK_RIGHTPAR      = -8,
-    TOK_COMMA         = -9,
-    TOK_SEMICOLON     = -10,
+    TOK_LEFTPAR       = -8,
+    TOK_RIGHTPAR      = -9,
+    TOK_COMMA         = -10,
+    TOK_SEMICOLON     = -11,
 
-    TOK_LEFTCURBRACE  = -11,
-    TOK_RIGHTCURBRACE = -12,
+    TOK_LEFTCURBRACE  = -12,
+    TOK_RIGHTCURBRACE = -13,
 
-    TOK_COLON         = -13,
-    TOK_ARROW         = -14,
-    TOK_EQUAL         = -15,
+    TOK_COLON         = -14,
+    TOK_ARROW         = -15,
+    TOK_EQUAL         = -16,
 
-    TOK_VARDECL       = -16,
-    TOK_RETURN        = -17,
+    TOK_VARDECL       = -17,
+    TOK_RETURN        = -18,
 
-    TOK_COMMENT       = -18,
+    TOK_COMMENT       = -19,
+
+    TOK_TRUE          = -20,
+    TOK_FALSE         = -21,
 };
 
 std::string get_token_type_string(eTokenType token_type);

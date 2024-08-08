@@ -14,7 +14,8 @@ std::string get_token_type_string(eTokenType token_type) {
         case TOK_DEF:           return "DEF";
 
         case TOK_IDENTIFIER:    return "IDENTIFIER";
-        case TOK_NUMBER:        return "NUMBER";
+        case TOK_INTEGER:       return "INTEGER";
+        case TOK_FLOAT:         return "FLOAT";
         
         case TOK_OP:            return "OPERATOR";
         
@@ -34,6 +35,9 @@ std::string get_token_type_string(eTokenType token_type) {
         case TOK_RETURN:        return "RETURN";
 
         case TOK_COMMENT:       return "COMMENT";
+
+        case TOK_TRUE:          return "TRUE";
+        case TOK_FALSE:         return "FALSE";
 
         case TOK_UNKNOWN:
         default:                return "UNKNOWN";
@@ -62,13 +66,10 @@ sToken cLexer::get_next_token() {
         while ((last_char = this->consume_char()) != '\n') {
             final_token.value += last_char;
         }
+        ++this->m_current_line_count;
         final_token.token_type = TOK_COMMENT;
         return final_token;
     }
-
-    // @TODO: Switch to switch statement
-    // this->consume_char();
-
 
     // @TODO: Change position
     if (last_char == '-' && this->peek_char() == '>') {
@@ -117,9 +118,22 @@ sToken cLexer::get_next_token() {
             this->m_current_pos++;
         }
 
-        final_token.token_type = TOK_NUMBER;
-        final_token.value = identifier_string;
+        if ((last_char = this->peek_char()) == '.') {
+            identifier_string += ".";
+            this->m_current_pos++;
+        } else {
+            final_token.token_type = TOK_INTEGER;
+            final_token.value = identifier_string;
+            return final_token;
+        }
 
+        while (isdigit(last_char = this->peek_char())) {
+            identifier_string += last_char; 
+            this->m_current_pos++;
+        }
+
+        final_token.token_type = TOK_FLOAT;
+        final_token.value = identifier_string;
         return final_token;
     }
 
