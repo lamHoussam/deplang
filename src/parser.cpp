@@ -56,17 +56,12 @@ std::string get_string_from_prim_type(const ePrimitiveType& type) {
 
 
 sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, std::shared_ptr<cCodeGenerator> code_generator) {
-    DEPLANG_PARSER_ERROR("Building ir operation");
-
     if (!l || !r || !l->value || !r->value) { 
         DEPLANG_PARSER_ERROR("Empty operands");
         return nullptr; 
     }
 
-    DEPLANG_PARSER_ERROR("Values checked");
-
     // @TODO: Change for type coersion
-
     r->value->print(llvm::errs());
     std::cout << std::endl;
     l->value->print(llvm::errs());
@@ -77,20 +72,31 @@ sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, 
         return nullptr;
     }
 
-    DEPLANG_PARSER_ERROR("Types checked");
-
     llvm::Value* final_value = nullptr;
+    std::string type;
+
     if (l->type->get_primitive_type() == TYPE_FLOAT) {
-        if (op == "+") { final_value = code_generator->m_Builder->CreateFAdd(l->value, r->value, "addtmp"); } 
-        else if (op == "-") { final_value = code_generator->m_Builder->CreateFSub(l->value, r->value, "subtmp"); }
-        else if (op == "*") { final_value = code_generator->m_Builder->CreateFMul(l->value, r->value, "multmp"); }
+        if (op == "+") { 
+            final_value = code_generator->m_Builder->CreateFAdd(l->value, r->value, "addtmp"); 
+            type = "float";
+        } 
+        else if (op == "-") { 
+            final_value = code_generator->m_Builder->CreateFSub(l->value, r->value, "subtmp"); 
+            type = "float";
+        }
+        else if (op == "*") { 
+            final_value = code_generator->m_Builder->CreateFMul(l->value, r->value, "multmp"); 
+            type = "float";
+        }
         else if (op == "<") {
             l->value = code_generator->m_Builder->CreateFCmpULT(l->value, r->value, "cmptmp");
             final_value = code_generator->m_Builder->CreateUIToFP(l->value, llvm::Type::getInt1Ty(*code_generator->m_Context), "booltmp");
+            type = "bool";
         }
         else if (op == ">") {
             l->value = code_generator->m_Builder->CreateFCmpULT(r->value, l->value, "cmptmp");
             final_value = code_generator->m_Builder->CreateUIToFP(l->value, llvm::Type::getInt1Ty(*code_generator->m_Context), "booltmp");
+            type = "bool";
         }
         else {
             DEPLANG_PARSER_ERROR("Expected Operator, got " << op);
@@ -98,16 +104,27 @@ sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, 
         }
     } 
     else if (l->type->get_primitive_type() == TYPE_INT) {
-        if (op == "+") { final_value = code_generator->m_Builder->CreateAdd(l->value, r->value, "addtmp"); }
-        else if (op == "-") { final_value = code_generator->m_Builder->CreateSub(l->value, r->value, "subtmp"); }
-        else if (op == "*") { final_value = code_generator->m_Builder->CreateMul(l->value, r->value, "multmp"); }
+        if (op == "+") { 
+            final_value = code_generator->m_Builder->CreateAdd(l->value, r->value, "addtmp"); 
+            type = "int";
+        }
+        else if (op == "-") { 
+            final_value = code_generator->m_Builder->CreateSub(l->value, r->value, "subtmp"); 
+            type = "int";
+        }
+        else if (op == "*") { 
+            final_value = code_generator->m_Builder->CreateMul(l->value, r->value, "multmp");
+            type = "int";
+        }
         else if (op == "<") {
             l->value = code_generator->m_Builder->CreateICmpULT(l->value, r->value, "cmptmp");
             final_value = code_generator->m_Builder->CreateUIToFP(l->value, llvm::Type::getInt1Ty(*code_generator->m_Context), "booltmp");
+            type = "bool";
         }
         else if (op == ">") {
             l->value = code_generator->m_Builder->CreateICmpULT(r->value, l->value, "cmptmp");
             final_value = code_generator->m_Builder->CreateUIToFP(l->value, llvm::Type::getInt1Ty(*code_generator->m_Context), "booltmp");
+            type = "bool";
         }
         else {
             DEPLANG_PARSER_ERROR("Expected Operator, got " << op);
@@ -120,8 +137,7 @@ sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, 
         return nullptr;
     }
 
-    DEPLANG_PARSER_ERROR("Built IR operation");
-    return new sTypedValue(final_value, l->type);
+    return new sTypedValue(final_value, new TypeExrAST(type));
 }
 
 
@@ -269,6 +285,11 @@ llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> c
     for (auto& expr : this->m_function_body) {
         value = expr->codegen(code_generator);
         if (dynamic_cast<ReturnExprAST*>(expr.get())) {
+            if (value->type->get_primitive_type() != this->m_return_type->get_primitive_type()) {
+                DEPLANG_PARSER_ERROR("Expression type different from function return type for function " << this->m_function_name);
+                func->eraseFromParent();
+                return nullptr;
+            }
             code_generator->m_Builder->CreateRet(value->value);
             break;
         }
