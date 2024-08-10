@@ -153,6 +153,10 @@ sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, 
 sTypedValue* LiteralIntExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     // @CHECK: Integers precision is 32 bits for now
     llvm::Value* val = llvm::ConstantInt::get(*code_generator->m_Context, llvm::APInt(32, this->m_value));
+    if (!val) {
+        DEPLANG_PARSER_ERROR("Couldn't create Literal Int value");
+        return nullptr;
+    }
 
     // auto type = std::make_unique<TypeExrAST>("int");
     return new sTypedValue(val, new TypeExrAST("int"));
@@ -161,6 +165,10 @@ sTypedValue* LiteralIntExprAST::codegen(std::shared_ptr<cCodeGenerator> code_gen
 
 sTypedValue* LiteralFloatExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     llvm::Value* val = llvm::ConstantFP::get(*code_generator->m_Context, llvm::APFloat(this->m_value));
+    if (!val) {
+        DEPLANG_PARSER_ERROR("Couldn't create Literal Float value");
+        return nullptr;
+    }
     // auto type = std::make_unique<TypeExrAST>("float");
     return new sTypedValue(val, new TypeExrAST("float"));
     // return std::make_unique<sTypedValue>(val, std::move(type));
@@ -170,7 +178,10 @@ sTypedValue* LiteralBoolExprAST::codegen(std::shared_ptr<cCodeGenerator> code_ge
     // llvm::Value* val = llvm::ConstantFP::get(*code_generator->m_Context, llvm::APFloat(this->m_value));
     // @TODO: Bools are constant ints (1, 0) for now
     llvm::Value* val = llvm::ConstantInt::getBool(*code_generator->m_Context, this->m_value);
-
+    if (!val) {
+        DEPLANG_PARSER_ERROR("Couldn't create Literal Bool value");
+        return nullptr;
+    }
     // auto type = std::make_unique<TypeExrAST>("bool");
     return new sTypedValue(val, new TypeExrAST("bool"));
     // return std::make_unique<sTypedValue>(val, std::move(type));
@@ -217,6 +228,10 @@ BinaryExprAST::BinaryExprAST(std::string op, std::unique_ptr<ExprAST> lhs, std::
 sTypedValue* BinaryExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     sTypedValue* l = this->m_lhs->codegen(code_generator);
     sTypedValue* r = this->m_rhs->codegen(code_generator);
+    if (!l || !r) {
+        DEPLANG_PARSER_ERROR("Couldn't evaluate left or right expression");
+        return nullptr;
+    }
 
     return build_ir_operation(l, r, this->m_op, code_generator);
 }
@@ -258,11 +273,23 @@ llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> c
 
     // Construct a function type
     // @TODO: Check if can be changed for the new type system
-    std::cout << "Function return type: " << get_string_from_prim_type(this->m_return_type->get_primitive_type()) << std::endl;
-
     llvm::Type* func_return_type = get_llvm_type(this->m_return_type->get_primitive_type(), *code_generator->m_Context);
+    if (!func_return_type) {
+        DEPLANG_PARSER_ERROR("Couldn't create function return type");
+        return nullptr;
+    }
+
     llvm::FunctionType* func_type = llvm::FunctionType::get(func_return_type, param_types, false);
+    if (!func_type) {
+        DEPLANG_PARSER_ERROR("Couldn't create function type");
+        return nullptr;
+    }
+
     llvm::Function* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, this->m_function_name, code_generator->m_Module.get());
+    if (!func) {
+        DEPLANG_PARSER_ERROR("Couldn't create function");
+        return nullptr;
+    }
 
     // code_generator->m_NamedValues.clear();
     code_generator->delete_named_values();
@@ -278,12 +305,20 @@ llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> c
     if (!func) { return nullptr; }
 
     llvm::BasicBlock* bb = llvm::BasicBlock::Create(*code_generator->m_Context, "entry", func);
+    if (!bb) {
+        DEPLANG_PARSER_ERROR("Couldn't create basic block");
+        return nullptr;
+    }
     code_generator->m_Builder->SetInsertPoint(bb);
 
     // code_generator->m_NamedValues.clear();
     sTypedValue* value;
     for (auto& expr : this->m_function_body) {
         value = expr->codegen(code_generator);
+        if (!value) {
+            DEPLANG_PARSER_ERROR("Couldn't evaluate expression");
+            return nullptr;
+        }
         if (dynamic_cast<ReturnExprAST*>(expr.get())) {
             if (value->type->get_primitive_type() != this->m_return_type->get_primitive_type()) {
                 DEPLANG_PARSER_ERROR("Expression type different from function return type for function " << this->m_function_name);
@@ -335,11 +370,20 @@ sTypedValue* CallExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator
 
     std::vector<llvm::Value*> args_v;
     for (unsigned i = 0, e = this->m_args.size(); i != e; ++i) {
-        args_v.push_back(this->m_args[i]->codegen(code_generator)->value);
+        llvm::Value* arg_value = this->m_args[i]->codegen(code_generator)->value;
+        if (!arg_value) {
+            DEPLANG_PARSER_ERROR("Couldn't evaluate argument of call expression");
+            return nullptr;
+        }
+        args_v.push_back(arg_value);
         if (!args_v.back()) { return nullptr; }
     }
 
     llvm::Value* val = code_generator->m_Builder->CreateCall(callee_f, args_v, "calltmp");
+    if (!val) {
+        DEPLANG_PARSER_ERROR("Couldn't Build function call");
+        return nullptr;
+    }
     return new sTypedValue(val, new TypeExrAST("int"));
 }
 
@@ -349,6 +393,10 @@ const std::string& AssignmentExprAST::get_variable_name() { return m_variable; }
 
 sTypedValue* AssignmentExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     auto value = this->m_rhs->codegen(code_generator);
+    if (!value) {
+        DEPLANG_PARSER_ERROR("Couldn't Assign value to variable");
+        return nullptr;
+    }
     code_generator->m_NamedValues[this->m_variable] = std::move(value);
     return value;
 }
@@ -468,6 +516,7 @@ std::unique_ptr<ExprAST> cParser::parse_identifier_expr() {
         this->get_next_token(); // Consume '='
         // @TODO: Parse Expression
         auto expr = this->parse_expression();
+        if (!expr) { return nullptr; }
         peeked_token = this->peek_next_token();
         if (peeked_token.token_type == TOK_SEMICOLON) {
             return std::make_unique<AssignmentExprAST>(identifier_name, std::move(expr));
@@ -574,6 +623,7 @@ std::unique_ptr<ReturnExprAST> cParser::parse_return_expr() {
     // @BACK
     if (peeked_token.token_type == TOK_SEMICOLON) {}
     auto final_expr = this->parse_expression();
+    if (!final_expr) { return nullptr; }
 
     return std::make_unique<ReturnExprAST>(std::move(final_expr));
 }
@@ -622,9 +672,6 @@ std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
     return std::make_unique<FunctionParameterAST>(param_name, std::move(param_type_expr));
 }
 
-
-
-
 // Parse function definition
 // func identifier(arg1, arg2, ...) {
 //    expressions_list
@@ -656,6 +703,8 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
     if (peeked_token.token_type != TOK_RIGHTPAR) {
         while (true) {
             auto param = this->parse_function_parameter();
+            if (!param) { return nullptr; }
+
             args.push_back(std::move(param));
             this->get_next_token();
 
@@ -767,6 +816,8 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
     if (peeked_token.token_type == TOK_EQUAL) {
         this->get_next_token(); // Consume '='
         auto expr = this->parse_expression();
+        if (!expr) { return nullptr; }
+
         peeked_token = this->peek_next_token();
         if (peeked_token.token_type == TOK_SEMICOLON) {
             auto var_type_expr = std::make_unique<TypeExrAST>(var_type);
@@ -806,6 +857,10 @@ void cParser::parse() {
             break;
         case TOK_DEF:
             auto func_def = this->parse_function_definition();
+            if (!func_def) {
+                DEPLANG_PARSER_ERROR("ERROR");
+                return;
+            }
             f = func_def->codegen(this->m_code_generator);
             f->print(llvm::errs());
             break;

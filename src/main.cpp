@@ -6,7 +6,8 @@
 #include <time.h>
 
 int main (int argc, char *argv[]) {
-    std::string file_path = "./test/expressions_test_other.dp";
+    // std::string file_path = "./test/expressions_test_other.dp";
+    std::string file_path = "./test/test_errors.dp";
 
     struct timespec start, end;
 
