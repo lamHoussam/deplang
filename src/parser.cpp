@@ -20,6 +20,17 @@ cCodeGenerator::cCodeGenerator() {
     this->m_Builder = std::make_unique<llvm::IRBuilder<>>(*m_Context);
 }
 
+void cCodeGenerator::delete_named_values() {
+    for (auto it = this->m_NamedValues.begin(); it != this->m_NamedValues.end(); it++) {
+        delete it->second;
+        it->second = nullptr;
+    }
+
+    this->m_NamedValues.clear();
+}
+
+
+
 llvm::Type* get_llvm_type(const ePrimitiveType& type, llvm::LLVMContext& context) {
     switch (type) {
     case TYPE_INT:    return llvm::Type::getInt32Ty(context);
@@ -31,11 +42,43 @@ llvm::Type* get_llvm_type(const ePrimitiveType& type, llvm::LLVMContext& context
     return nullptr;
 }
 
-std::unique_ptr<sTypedValue> build_ir_operation(std::unique_ptr<sTypedValue> l, std::unique_ptr<sTypedValue> r, std::string op, std::shared_ptr<cCodeGenerator> code_generator) {
+std::string get_string_from_prim_type(const ePrimitiveType& type) {
+    switch (type) {
+    case TYPE_INT:    return "INT";
+    case TYPE_BOOL:   return "BOOL";
+    case TYPE_FLOAT:  return "FLOAT";
+    case TYPE_EMPTY:  return "EMPTY";
+    }
 
-    if (!l || !r || !l->value || !r->value) { return nullptr; }
+    return "";
+}
+
+
+
+sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, std::shared_ptr<cCodeGenerator> code_generator) {
+
+    DEPLANG_PARSER_ERROR("Building ir operation");
+
+    if (!l || !r || !l->value || !r->value) { 
+        DEPLANG_PARSER_ERROR("Empty operands");
+        return nullptr; 
+    }
+
+    DEPLANG_PARSER_ERROR("Values checked");
+
     // @TODO: Change for type coersion
-    if (l->type->get_primitive_type() != r->type->get_primitive_type()) { return nullptr; }
+
+    r->value->print(llvm::errs());
+    std::cout << std::endl;
+    l->value->print(llvm::errs());
+    std::cout << std::endl;
+
+    if (!l->type || !r->type || l->type->get_primitive_type() != r->type->get_primitive_type()) { 
+        DEPLANG_PARSER_ERROR("Binary operation on different types");
+        return nullptr;
+    }
+
+    DEPLANG_PARSER_ERROR("Types checked");
 
     llvm::Value* final_value = nullptr;
     if (l->type->get_primitive_type() == TYPE_FLOAT) {
@@ -71,7 +114,6 @@ std::unique_ptr<sTypedValue> build_ir_operation(std::unique_ptr<sTypedValue> l, 
             DEPLANG_PARSER_ERROR("Expected Operator, got " << op);
             return nullptr;
         }
-
     }
     else {
         // @TODO: Implement binary operations for bools
@@ -79,18 +121,44 @@ std::unique_ptr<sTypedValue> build_ir_operation(std::unique_ptr<sTypedValue> l, 
         return nullptr;
     }
 
-    return std::make_unique<sTypedValue>(final_value, std::move(l->type));
+    DEPLANG_PARSER_ERROR("Built IR operation");
+    return new sTypedValue(final_value, std::move(l->type));
 }
 
 
 // Expressions
-NumberExprAST::NumberExprAST(int value) : m_value(value) {}
+// @BACK
+// std::unique_ptr<sTypedValue> NumberExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+//     // return llvm::ConstantInt::get(*code_generator->m_Context, llvm::APInt(this->m_value));
+//     llvm::Value* val = llvm::ConstantFP::get(*code_generator->m_Context, llvm::APFloat(this->m_value));
+//     auto type = std::make_unique<TypeExrAST>("float");
+//     return std::make_unique<sTypedValue>(val, std::move(type));
+// }
 
-std::unique_ptr<sTypedValue> NumberExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
-    // return llvm::ConstantInt::get(*code_generator->m_Context, llvm::APInt(this->m_value));
+sTypedValue* LiteralIntExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    // @CHECK: Integers precision is 32 bits for now
+    llvm::Value* val = llvm::ConstantInt::get(*code_generator->m_Context, llvm::APInt(32, this->m_value));
+
+    // auto type = std::make_unique<TypeExrAST>("int");
+    return new sTypedValue(val, new TypeExrAST("int"));
+    // return std::make_unique<sTypedValue>(val, std::move(type));
+}
+
+sTypedValue* LiteralFloatExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     llvm::Value* val = llvm::ConstantFP::get(*code_generator->m_Context, llvm::APFloat(this->m_value));
-    auto type = std::make_unique<TypeExrAST>("float");
-    return std::make_unique<sTypedValue>(val, std::move(type));
+    // auto type = std::make_unique<TypeExrAST>("float");
+    return new sTypedValue(val, new TypeExrAST("float"));
+    // return std::make_unique<sTypedValue>(val, std::move(type));
+}
+
+sTypedValue* LiteralBoolExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    // llvm::Value* val = llvm::ConstantFP::get(*code_generator->m_Context, llvm::APFloat(this->m_value));
+    // @TODO: Bools are constant ints (1, 0) for now
+    llvm::Value* val = llvm::ConstantInt::getBool(*code_generator->m_Context, this->m_value);
+
+    // auto type = std::make_unique<TypeExrAST>("bool");
+    return new sTypedValue(val, new TypeExrAST("bool"));
+    // return std::make_unique<sTypedValue>(val, std::move(type));
 }
 
 // Variable Expression AST
@@ -99,8 +167,18 @@ VariableExprAST::VariableExprAST(const std::string& name) : m_name(name) {}
 
 const std::string& VariableExprAST::get_name() { return m_name; }
 
-std::unique_ptr<sTypedValue> VariableExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
-    std::unique_ptr<sTypedValue> value = std::move(code_generator->m_NamedValues[this->m_name]);
+sTypedValue* VariableExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    // @TODO[P1]: Moved out of NamedValues
+    // std::unique_ptr<sTypedValue> value = std::move(code_generator->m_NamedValues[this->m_name]);
+    sTypedValue* value = code_generator->m_NamedValues[this->m_name];
+
+    std::cout << "VARIABLE EXPR: " << std::endl;
+    value->value->print(llvm::errs());
+    std::cout << std::endl;
+    std::cout << &value->type << std::endl;
+    std::cout << "VARIABLE EXPR END" << std::endl;
+
+
     if (value) { return value; }
     else {
         DEPLANG_PARSER_ERROR("Variable " << this->m_name << " not found");
@@ -118,7 +196,7 @@ TypeExrAST::TypeExrAST(const std::string& name) {
 
 const ePrimitiveType& TypeExrAST::get_primitive_type() { return this->m_prim_type; }
 
-std::unique_ptr<sTypedValue> TypeExrAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+sTypedValue* TypeExrAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     return nullptr;
 }
 
@@ -127,16 +205,18 @@ std::unique_ptr<sTypedValue> TypeExrAST::codegen(std::shared_ptr<cCodeGenerator>
 BinaryExprAST::BinaryExprAST(std::string op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs) :
     m_op(op), m_lhs(std::move(lhs)), m_rhs(std::move(rhs)) {}   
 
-std::unique_ptr<sTypedValue> BinaryExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
-    std::unique_ptr<sTypedValue> l = this->m_lhs->codegen(code_generator);
-    std::unique_ptr<sTypedValue> r = this->m_rhs->codegen(code_generator);
+sTypedValue* BinaryExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    sTypedValue* l = this->m_lhs->codegen(code_generator);
+    sTypedValue* r = this->m_rhs->codegen(code_generator);
 
-    return build_ir_operation(std::move(l), std::move(r), this->m_op, code_generator);
+    return build_ir_operation(l, r, this->m_op, code_generator);
 }
 
 // Return Expr AST
 ReturnExprAST::ReturnExprAST(std::unique_ptr<ExprAST> expression) : m_expression(std::move(expression)) {}
-std::unique_ptr<sTypedValue> ReturnExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+
+
+sTypedValue* ReturnExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     if (this->m_expression) { return this->m_expression->codegen(code_generator); }
     return nullptr;
 }
@@ -146,6 +226,7 @@ FunctionParameterAST::FunctionParameterAST(const std::string& param_name, std::u
 
 const std::string& FunctionParameterAST::get_param_name() { return m_param_name; }
 const ePrimitiveType& FunctionParameterAST::get_primitive_type() { return m_type_expr->get_primitive_type(); }
+
 
 // Functio ndefinition AST
 FunctionDefinitionAST::FunctionDefinitionAST(const std::string& function_name, std::vector<std::unique_ptr<FunctionParameterAST>> parameters, std::unique_ptr<TypeExrAST> return_type, std::vector<std::unique_ptr<ExprAST>> function_body) : m_function_name(function_name), m_parameters(std::move(parameters)), m_return_type(std::move(return_type)), m_function_body(std::move(function_body)) {}
@@ -168,18 +249,20 @@ llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> c
 
     // Construct a function type
     // @TODO: Check if can be changed for the new type system
+    std::cout << "Function return type: " << get_string_from_prim_type(this->m_return_type->get_primitive_type()) << std::endl;
 
     llvm::Type* func_return_type = get_llvm_type(this->m_return_type->get_primitive_type(), *code_generator->m_Context);
     llvm::FunctionType* func_type = llvm::FunctionType::get(func_return_type, param_types, false);
     llvm::Function* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, this->m_function_name, code_generator->m_Module.get());
 
-    code_generator->m_NamedValues.clear();
+    // code_generator->m_NamedValues.clear();
+    code_generator->delete_named_values();
     unsigned index = 0;
     for (auto& arg : func->args()) {
         arg.setName(this->m_parameters[index]->get_param_name()); 
         std::cout << "Adding parameter: " << std::string(arg.getName()) << std::endl;
         // @TODO: Set arg type
-        code_generator->m_NamedValues[std::string(arg.getName())] = std::make_unique<sTypedValue>(&arg, std::move(this->m_parameters[index]->m_type_expr));
+        code_generator->m_NamedValues[std::string(arg.getName())] = new sTypedValue(&arg, this->m_parameters[index]->m_type_expr.release());
         index++;
     }
 
@@ -189,7 +272,7 @@ llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> c
     code_generator->m_Builder->SetInsertPoint(bb);
 
     // code_generator->m_NamedValues.clear();
-    std::unique_ptr<sTypedValue> value;
+    sTypedValue* value;
     for (auto& expr : this->m_function_body) {
         value = expr->codegen(code_generator);
         if (dynamic_cast<ReturnExprAST*>(expr.get())) {
@@ -213,8 +296,8 @@ VariableDeclarationExprAST::VariableDeclarationExprAST(const std::string& variab
 const std::string& VariableDeclarationExprAST::get_variable_name() { return m_variable_name; }
 const ePrimitiveType& VariableDeclarationExprAST::get_primitive_type() { return m_variable_type->get_primitive_type(); }
 
-std::unique_ptr<sTypedValue> VariableDeclarationExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
-    std::unique_ptr<sTypedValue> value;
+sTypedValue* VariableDeclarationExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    sTypedValue* value;
     if (this->m_expression) { value = this->m_expression->codegen(code_generator); }
     code_generator->m_NamedValues[this->m_variable_name] = std::move(value);
     return value;
@@ -224,7 +307,7 @@ std::unique_ptr<sTypedValue> VariableDeclarationExprAST::codegen(std::shared_ptr
 CallExprAST::CallExprAST(const std::string& callee, std::vector<std::unique_ptr<ExprAST>> args) :
     m_callee(callee), m_args(std::move(args)) {}
 
-std::unique_ptr<sTypedValue> CallExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+sTypedValue* CallExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     llvm::Function* callee_f = code_generator->m_Module->getFunction(this->m_callee);
     if (!callee_f) {
         DEPLANG_PARSER_ERROR("Function " << this->m_callee << " not found");
@@ -243,14 +326,14 @@ std::unique_ptr<sTypedValue> CallExprAST::codegen(std::shared_ptr<cCodeGenerator
     }
 
     llvm::Value* val = code_generator->m_Builder->CreateCall(callee_f, args_v, "calltmp");
-    return std::make_unique<sTypedValue>(val, std::make_unique<TypeExrAST>("float"));
+    return new sTypedValue(val, new TypeExrAST("int"));
 }
 
 // Assignment Expr AST
 AssignmentExprAST::AssignmentExprAST(const std::string& variable, std::unique_ptr<ExprAST> rhs) : m_variable(variable), m_rhs(std::move(rhs)) {}
 const std::string& AssignmentExprAST::get_variable_name() { return m_variable; }
 
-std::unique_ptr<sTypedValue> AssignmentExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+sTypedValue* AssignmentExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     auto value = this->m_rhs->codegen(code_generator);
     code_generator->m_NamedValues[this->m_variable] = std::move(value);
     return value;
@@ -329,12 +412,16 @@ void cParser::emit_object_code(std::string object_file_name) {
 
 std::unique_ptr<ExprAST> cParser::parse_number_expr() {
     sToken peeked_token = this->peek_next_token();
-    int num_value = atoi(peeked_token.value.c_str());
-    std::cout << "Found Numeric Value: " << num_value << std::endl;
-    auto result = std::make_unique<NumberExprAST>(num_value);
+    std::unique_ptr<ExprAST> result;
     this->get_next_token(); // Consume number
 
-    return std::move(result);
+    switch (peeked_token.token_type) {
+    case TOK_INTEGER: return std::make_unique<LiteralIntExprAST>(peeked_token.value);
+    case TOK_FLOAT:   return std::make_unique<LiteralFloatExprAST>(peeked_token.value);
+    default:
+        DEPLANG_PARSER_ERROR("Expected Integer or Float, got " << peeked_token.value);
+        return nullptr;
+    }
 }
 
 
@@ -427,7 +514,7 @@ std::unique_ptr<ExprAST> cParser::parse_primary() {
     switch (peeked_token.token_type) {
         case TOK_IDENTIFIER:
             return this->parse_identifier_expr();
-        case TOK_NUMBER:
+        case TOK_INTEGER:
             return this->parse_number_expr();
         case TOK_LEFTPAR:
             return this->parse_paren_expr();
@@ -467,6 +554,11 @@ std::unique_ptr<ExprAST> cParser::parse_binop_expression(int expr_prec, std::uni
 
 std::unique_ptr<ReturnExprAST> cParser::parse_return_expr() {
     this->get_next_token(); // Consume 'return'
+    
+    sToken peeked_token = this->peek_next_token();
+
+    // @BACK
+    if (peeked_token.token_type == TOK_SEMICOLON) {}
     auto final_expr = this->parse_expression();
 
     return std::make_unique<ReturnExprAST>(std::move(final_expr));
@@ -488,7 +580,7 @@ std::unique_ptr<FunctionParameterAST> cParser::parse_function_parameter() {
         DEPLANG_PARSER_ERROR("Expected identifier, got " << peeked_token.value << " at line " << peeked_token.line_number);
         return nullptr;
     }
-    
+
     this->get_next_token(); // Consume identifier
 
     std::string param_name = peeked_token.value;
@@ -573,7 +665,7 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         this->get_next_token(); // Consume '->'
 
         peeked_token = this->peek_next_token();
-        
+
         if (peeked_token.token_type != TOK_IDENTIFIER) {
             DEPLANG_PARSER_ERROR("Expected identifier got " << peeked_token.value << " at line " << peeked_token.line_number);
             return nullptr;
@@ -681,6 +773,7 @@ int cParser::get_binop_precedence(std::string op) {
 void cParser::parse() {
     // this->m_current_token = this->m_tokens[0];
     
+    llvm::Function* f;
     while (true) {
         // this->get_next_token();
         
@@ -699,7 +792,7 @@ void cParser::parse() {
             break;
         case TOK_DEF:
             auto func_def = this->parse_function_definition();
-            llvm::Function* f = func_def->codegen(this->m_code_generator);
+            f = func_def->codegen(this->m_code_generator);
             f->print(llvm::errs());
             break;
         }

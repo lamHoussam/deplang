@@ -65,30 +65,57 @@ public:
     std::unique_ptr<llvm::IRBuilder<>> m_Builder;
 
     std::unique_ptr<llvm::Module> m_Module;
-    std::map<std::string, std::unique_ptr<sTypedValue>> m_NamedValues;
+    std::map<std::string, sTypedValue*> m_NamedValues;
 
+    void delete_named_values();
     ~cCodeGenerator() = default;
+
+    // ~cCodeGenerator() = default;
 private:
 };
 
 // @TODO: Implement
-std::unique_ptr<sTypedValue> build_ir_operation(std::unique_ptr<sTypedValue> l, std::unique_ptr<sTypedValue> r, std::string op, std::shared_ptr<cCodeGenerator> code_generator);
+sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, std::shared_ptr<cCodeGenerator> code_generator);
 
 
 class ExprAST {
 public:
     virtual ~ExprAST() = default;
-    virtual std::unique_ptr<sTypedValue> codegen(std::shared_ptr<cCodeGenerator> code_generator) = 0;
+    virtual sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) = 0;
 };
 
 
 // Value
-class NumberExprAST : public ExprAST {
+
+class LiteralIntExprAST : public ExprAST {
 public:
-    NumberExprAST(int value); 
-    std::unique_ptr<sTypedValue> codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
+    LiteralIntExprAST(const std::string& value) : m_value(std::stoi(value)) {}
+    inline const int get_value() { return m_value; }
+
+    sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
+private:
+    int m_value;
+};
+
+
+class LiteralFloatExprAST : public ExprAST {
+public:
+    LiteralFloatExprAST(const std::string& value) : m_value(std::stof(value)) {}
+    inline const float get_value() { return m_value; }
+
+    sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
 private:
     float m_value;
+};
+
+class LiteralBoolExprAST: public ExprAST {
+public:
+    LiteralBoolExprAST(bool value) : m_value(value) {}
+    inline const bool get_value() { return m_value; }
+
+    sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
+private:
+    bool m_value;
 };
 
 // Name
@@ -97,7 +124,7 @@ public:
     VariableExprAST(const std::string& name);
 
     const std::string& get_name();
-    std::unique_ptr<sTypedValue> codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
+    sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
 private:
     std::string m_name;
 };
@@ -110,7 +137,7 @@ public:
     // @TODO: Change to real type
     const ePrimitiveType& get_primitive_type();
 
-    std::unique_ptr<sTypedValue> codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
+    sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
 
 private:
     ePrimitiveType m_prim_type;
@@ -125,7 +152,7 @@ class BinaryTypeExprAST : public ExprAST {
 class BinaryExprAST : public ExprAST {
 public:
     BinaryExprAST(std::string op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs);
-    std::unique_ptr<sTypedValue> codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
+    sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
 private:
     std::string m_op;
     std::unique_ptr<ExprAST> m_lhs, m_rhs;
@@ -134,7 +161,7 @@ private:
 class ReturnExprAST : public ExprAST {
 public:
     ReturnExprAST(std::unique_ptr<ExprAST> expression);
-    std::unique_ptr<sTypedValue> codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
+    sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
 private:
     std::unique_ptr<ExprAST> m_expression;
 };
@@ -186,7 +213,7 @@ public:
     // @TODO: Change type
     inline const ePrimitiveType& get_primitive_type();
 
-    std::unique_ptr<sTypedValue> codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
+    sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
 
 private:
     std::string m_variable_name;
@@ -199,7 +226,7 @@ private:
 class CallExprAST : public ExprAST {
 public:
     CallExprAST(const std::string& callee, std::vector<std::unique_ptr<ExprAST>> args);
-    std::unique_ptr<sTypedValue> codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
+    sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
 
 private:
     std::string m_callee;
@@ -214,7 +241,7 @@ public:
     AssignmentExprAST(const std::string& variable, std::unique_ptr<ExprAST> rhs);
 
     inline const std::string& get_variable_name();
-    std::unique_ptr<sTypedValue> codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
+    sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
 
 private:
     std::string m_variable;
@@ -224,9 +251,9 @@ private:
 
 struct sTypedValue {
     llvm::Value* value;
-    std::unique_ptr<TypeExrAST> type;
-    sTypedValue(llvm::Value* value, std::unique_ptr<TypeExrAST> type) {
-        this->value = value; this->type = std::move(type);
+    TypeExrAST* type;
+    sTypedValue(llvm::Value* value, TypeExrAST* type) {
+        this->value = value; this->type = type;
     }
 
     // ~sTypedValue() {
