@@ -56,7 +56,6 @@ std::string get_string_from_prim_type(const ePrimitiveType& type) {
 
 
 sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, std::shared_ptr<cCodeGenerator> code_generator) {
-
     DEPLANG_PARSER_ERROR("Building ir operation");
 
     if (!l || !r || !l->value || !r->value) { 
@@ -99,7 +98,7 @@ sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, 
         }
     } 
     else if (l->type->get_primitive_type() == TYPE_INT) {
-        if (op == "+") { code_generator->m_Builder->CreateAdd(l->value, r->value, "addtmp"); } 
+        if (op == "+") { final_value = code_generator->m_Builder->CreateAdd(l->value, r->value, "addtmp"); }
         else if (op == "-") { final_value = code_generator->m_Builder->CreateSub(l->value, r->value, "subtmp"); }
         else if (op == "*") { final_value = code_generator->m_Builder->CreateMul(l->value, r->value, "multmp"); }
         else if (op == "<") {
@@ -122,7 +121,7 @@ sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, 
     }
 
     DEPLANG_PARSER_ERROR("Built IR operation");
-    return new sTypedValue(final_value, std::move(l->type));
+    return new sTypedValue(final_value, l->type);
 }
 
 
@@ -172,13 +171,6 @@ sTypedValue* VariableExprAST::codegen(std::shared_ptr<cCodeGenerator> code_gener
     // std::unique_ptr<sTypedValue> value = std::move(code_generator->m_NamedValues[this->m_name]);
     sTypedValue* value = code_generator->m_NamedValues[this->m_name];
 
-    std::cout << "VARIABLE EXPR: " << std::endl;
-    value->value->print(llvm::errs());
-    std::cout << std::endl;
-    std::cout << &value->type << std::endl;
-    std::cout << "VARIABLE EXPR END" << std::endl;
-
-
     if (value) { return value; }
     else {
         DEPLANG_PARSER_ERROR("Variable " << this->m_name << " not found");
@@ -197,6 +189,7 @@ TypeExrAST::TypeExrAST(const std::string& name) {
 const ePrimitiveType& TypeExrAST::get_primitive_type() { return this->m_prim_type; }
 
 sTypedValue* TypeExrAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    // @TODO: Add type code generation
     return nullptr;
 }
 
