@@ -141,7 +141,7 @@ private:
 // Type
 class TypeExrAST : public ExprAST {
 public:
-    // TypeExrAST(const std::string& name, std::unique_ptr<TypeExrAST> lhs, std::unique_ptr<TypeExrAST> rhs);
+    TypeExrAST(const std::string& name, std::unique_ptr<TypeExrAST> lhs, std::unique_ptr<TypeExrAST> rhs);
     TypeExrAST(const std::string& name);
 
     // @TODO: Change to real type
@@ -294,9 +294,13 @@ public:
     std::unique_ptr<ExprAST> parse_expression();
     std::unique_ptr<ExprAST> parse_identifier_expr();
     std::unique_ptr<ExprAST> parse_primary();
+    std::unique_ptr<TypeExrAST> parse_type();
+    
     std::unique_ptr<ReturnExprAST> parse_return_expr();
 
     std::unique_ptr<ExprAST> parse_binop_expression(int expr_prec, std::unique_ptr<ExprAST> lhs);
+
+    std::unique_ptr<TypeExrAST> parse_type_expression(int expr_prec, std::unique_ptr<TypeExrAST> lhs);
 
     std::unique_ptr<FunctionParameterAST> parse_function_parameter();
     std::unique_ptr<FunctionDefinitionAST> parse_function_definition();
@@ -304,6 +308,8 @@ public:
     std::unique_ptr<VariableDeclarationExprAST> parse_variable_declaration();
 
     int get_binop_precedence(std::string op);
+    int get_type_operator_precedence(std::string op);
+
     void emit_object_code(std::string file_name);
 
     void parse();
