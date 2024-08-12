@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/STLExtras.h"
 
@@ -147,18 +148,15 @@ public:
     // @TODO: Change to real type
     const ePrimitiveType& get_primitive_type();
     sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
+
+    llvm::Type* register_type(std::shared_ptr<cCodeGenerator> code_generator);
     void print() override;
+
+    bool type_check(const TypeExrAST* other_type_expr);
 private:
     ePrimitiveType m_prim_type;
     std::unique_ptr<TypeExrAST> m_left, m_right;
 };
-
-
-
-class BinaryTypeExprAST : public ExprAST {
-
-};
-
 
 // Expr Op Expr
 class BinaryExprAST : public ExprAST {
@@ -269,14 +267,11 @@ private:
 
 struct sTypedValue {
     llvm::Value* value;
-    TypeExrAST* type;
-    sTypedValue(llvm::Value* value, TypeExrAST* type) {
+    llvm::Type* type;
+    sTypedValue(llvm::Value* value, llvm::Type* type) {
         this->value = value; this->type = type;
     }
-
-    // ~sTypedValue() {
-    //     value->deleteValue();
-    // }
+    ~sTypedValue() = default;
 };
 
 

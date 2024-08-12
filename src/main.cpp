@@ -74,6 +74,7 @@ int main (int argc, char *argv[]) {
     std::cout << std::endl;
     std::cout << std::endl;
 
+    // parser->m_code_generator->delete_named_values();
     parser->emit_object_code("obj/output.o");
 
     return 0;

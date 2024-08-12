@@ -1,4 +1,5 @@
 #include "../include/parser.h"
+#include <llvm-14/llvm/Support/raw_ostream.h>
 
 /**
 * Function call
@@ -11,6 +12,7 @@
 // @CHECK: Don't Consume ';' at end of expression
 // @TODO: Add a ret instruction for void functions, to avoid seg fault on pass run
 // @TODO: Implement Better Error management
+// @TODO: Implement type inference
 
 // Code Generator
 cCodeGenerator::cCodeGenerator() {
@@ -20,15 +22,7 @@ cCodeGenerator::cCodeGenerator() {
     this->m_Builder = std::make_unique<llvm::IRBuilder<>>(*m_Context);
 }
 
-void cCodeGenerator::delete_named_values() {
-    for (auto it = this->m_NamedValues.begin(); it != this->m_NamedValues.end(); it++) {
-        delete it->second;
-        it->second = nullptr;
-    }
-
-    this->m_NamedValues.clear();
-}
-
+void cCodeGenerator::delete_named_values() { this->m_NamedValues.clear(); }
 
 llvm::Type* get_llvm_type(const ePrimitiveType& type, llvm::LLVMContext& context) {
     switch (type) {
@@ -38,8 +32,6 @@ llvm::Type* get_llvm_type(const ePrimitiveType& type, llvm::LLVMContext& context
     case TYPE_EMPTY:  return llvm::Type::getVoidTy(context);
     default: return nullptr;
     }
-
-    return nullptr;
 }
 
 std::string get_string_from_prim_type(const ePrimitiveType& type) {
@@ -51,9 +43,8 @@ std::string get_string_from_prim_type(const ePrimitiveType& type) {
     case TYPE_PROD:       return "*";
     case TYPE_ENUM:       return "|";
     case TYPE_FUNCTION:   return "->";
+    default:              return "";
     }
-
-    return "";
 }
 
 
@@ -70,64 +61,64 @@ sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, 
     l->value->print(llvm::errs());
     std::cout << std::endl;
 
-    if (!l->type || !r->type || l->type->get_primitive_type() != r->type->get_primitive_type()) { 
+    if (!l->type || !r->type) { 
         DEPLANG_PARSER_ERROR("Binary operation on different types");
         return nullptr;
     }
 
     llvm::Value* final_value = nullptr;
-    std::string type;
+    llvm::Type* final_type;
 
-    if (l->type->get_primitive_type() == TYPE_FLOAT) {
+    if (l->type->isFloatTy()) {
         if (op == "+") { 
             final_value = code_generator->m_Builder->CreateFAdd(l->value, r->value, "addtmp"); 
-            type = "float";
+            final_type = llvm::Type::getFloatTy(*code_generator->m_Context);
         } 
         else if (op == "-") { 
             final_value = code_generator->m_Builder->CreateFSub(l->value, r->value, "subtmp"); 
-            type = "float";
+            final_type = llvm::Type::getFloatTy(*code_generator->m_Context);
         }
         else if (op == "*") { 
             final_value = code_generator->m_Builder->CreateFMul(l->value, r->value, "multmp"); 
-            type = "float";
+            final_type = llvm::Type::getFloatTy(*code_generator->m_Context);
         }
         else if (op == "<") {
             l->value = code_generator->m_Builder->CreateFCmpULT(l->value, r->value, "cmptmp");
             final_value = code_generator->m_Builder->CreateUIToFP(l->value, llvm::Type::getInt1Ty(*code_generator->m_Context), "booltmp");
-            type = "bool";
+            final_type = llvm::Type::getInt1Ty(*code_generator->m_Context);
         }
         else if (op == ">") {
             l->value = code_generator->m_Builder->CreateFCmpULT(r->value, l->value, "cmptmp");
             final_value = code_generator->m_Builder->CreateUIToFP(l->value, llvm::Type::getInt1Ty(*code_generator->m_Context), "booltmp");
-            type = "bool";
+            final_type = llvm::Type::getInt1Ty(*code_generator->m_Context);
         }
         else {
             DEPLANG_PARSER_ERROR("Expected Operator, got " << op);
             return nullptr;
         }
     } 
-    else if (l->type->get_primitive_type() == TYPE_INT) {
+    else if (l->type->isIntegerTy()) {
         if (op == "+") { 
             final_value = code_generator->m_Builder->CreateAdd(l->value, r->value, "addtmp"); 
-            type = "int";
+            final_type = llvm::Type::getInt32Ty(*code_generator->m_Context);
         }
         else if (op == "-") { 
             final_value = code_generator->m_Builder->CreateSub(l->value, r->value, "subtmp"); 
-            type = "int";
+            final_type = llvm::Type::getInt32Ty(*code_generator->m_Context);
         }
         else if (op == "*") { 
             final_value = code_generator->m_Builder->CreateMul(l->value, r->value, "multmp");
-            type = "int";
+            final_type = llvm::Type::getInt32Ty(*code_generator->m_Context);
         }
         else if (op == "<") {
             l->value = code_generator->m_Builder->CreateICmpULT(l->value, r->value, "cmptmp");
             final_value = code_generator->m_Builder->CreateUIToFP(l->value, llvm::Type::getInt1Ty(*code_generator->m_Context), "booltmp");
-            type = "bool";
+            final_type = llvm::Type::getInt1Ty(*code_generator->m_Context);
         }
         else if (op == ">") {
             l->value = code_generator->m_Builder->CreateICmpULT(r->value, l->value, "cmptmp");
             final_value = code_generator->m_Builder->CreateUIToFP(l->value, llvm::Type::getInt1Ty(*code_generator->m_Context), "booltmp");
-            type = "bool";
+            final_type = llvm::Type::getInt1Ty(*code_generator->m_Context);
         }
         else {
             DEPLANG_PARSER_ERROR("Expected Operator, got " << op);
@@ -140,7 +131,7 @@ sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, 
         return nullptr;
     }
 
-    return new sTypedValue(final_value, new TypeExrAST(type));
+    return new sTypedValue(final_value, final_type);
 }
 
 
@@ -161,8 +152,10 @@ sTypedValue* LiteralIntExprAST::codegen(std::shared_ptr<cCodeGenerator> code_gen
         return nullptr;
     }
 
+    return new sTypedValue(val, llvm::Type::getInt32Ty(*code_generator->m_Context));
+
     // auto type = std::make_unique<TypeExrAST>("int");
-    return new sTypedValue(val, new TypeExrAST("int"));
+    // return new sTypedValue(val, new TypeExrAST("int"));
     // return std::make_unique<sTypedValue>(val, std::move(type));
 }
 
@@ -176,8 +169,11 @@ sTypedValue* LiteralFloatExprAST::codegen(std::shared_ptr<cCodeGenerator> code_g
         DEPLANG_PARSER_ERROR("Couldn't create Literal Float value");
         return nullptr;
     }
+
+    return new sTypedValue(val, llvm::Type::getFloatTy(*code_generator->m_Context));
+
     // auto type = std::make_unique<TypeExrAST>("float");
-    return new sTypedValue(val, new TypeExrAST("float"));
+    // return new sTypedValue(val, new TypeExrAST("float"));
     // return std::make_unique<sTypedValue>(val, std::move(type));
 }
 
@@ -187,14 +183,14 @@ void LiteralFloatExprAST::print() {
 
 sTypedValue* LiteralBoolExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     // llvm::Value* val = llvm::ConstantFP::get(*code_generator->m_Context, llvm::APFloat(this->m_value));
-    // @TODO: Bools are constant ints (1, 0) for now
     llvm::Value* val = llvm::ConstantInt::getBool(*code_generator->m_Context, this->m_value);
     if (!val) {
         DEPLANG_PARSER_ERROR("Couldn't create Literal Bool value");
         return nullptr;
     }
     // auto type = std::make_unique<TypeExrAST>("bool");
-    return new sTypedValue(val, new TypeExrAST("bool"));
+    return new sTypedValue(val, llvm::Type::getInt1Ty(*code_generator->m_Context));
+    // return new sTypedValue(val, new TypeExrAST("bool"));
     // return std::make_unique<sTypedValue>(val, std::move(type));
 }
 
@@ -209,7 +205,6 @@ VariableExprAST::VariableExprAST(const std::string& name) : m_name(name) {}
 const std::string& VariableExprAST::get_name() { return m_name; }
 
 sTypedValue* VariableExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
-    // @TODO[P1]: Moved out of NamedValues
     // std::unique_ptr<sTypedValue> value = std::move(code_generator->m_NamedValues[this->m_name]);
     sTypedValue* value = code_generator->m_NamedValues[this->m_name];
 
@@ -256,6 +251,27 @@ sTypedValue* TypeExrAST::codegen(std::shared_ptr<cCodeGenerator> code_generator)
     return nullptr;
 }
 
+llvm::Type* TypeExrAST::register_type(std::shared_ptr<cCodeGenerator> code_generator) {
+    
+    llvm::Type* prim_type = get_llvm_type(this->get_primitive_type(), *code_generator->m_Context);
+
+    // @TODO: For now only doing product types, implement others later
+    if (!prim_type && this->m_left && this->m_right) {
+        llvm::Type* frst_type = this->m_left->register_type(code_generator);
+        llvm::Type* scnd_type = this->m_right->register_type(code_generator);
+        
+        std::vector<llvm::Type*> types;
+        types.push_back(frst_type);
+        types.push_back(scnd_type);
+
+        llvm::StructType* tuple_type = llvm::StructType::get(*code_generator->m_Context, types);
+
+        return tuple_type;
+    }
+
+    return prim_type;
+}
+
 void TypeExrAST::print() {
     std::cout << "\t" << get_string_from_prim_type(this->m_prim_type) << std::endl;
     if (this->m_left && this->m_right) {
@@ -268,6 +284,20 @@ void TypeExrAST::print() {
     std::cout << std::endl;
 }
 
+bool TypeExrAST::type_check(const TypeExrAST* other_type_expr) {
+    if (this->m_prim_type != other_type_expr->m_prim_type) { return false; }
+    if (!this->m_left || !this->m_right || !other_type_expr->m_left || !other_type_expr->m_right) {
+        return false;
+    }
+    if (this->m_prim_type == TYPE_PROD || this->m_prim_type == TYPE_FUNCTION) {
+        return this->m_left->type_check(other_type_expr->m_left.get()) && this->m_right->type_check(other_type_expr->m_right.get());
+    } else if (this->m_prim_type == TYPE_ENUM) {
+        return (m_left->type_check(other_type_expr->m_left.get()) && m_right->type_check(other_type_expr->m_right.get()))
+        || (m_left->type_check(other_type_expr->m_right.get()) && m_right->type_check(other_type_expr->m_left.get()));
+    }
+
+    return true;
+}
 
 // Binary Expr AST
 BinaryExprAST::BinaryExprAST(std::string op, std::unique_ptr<ExprAST> lhs, std::unique_ptr<ExprAST> rhs) :
@@ -281,6 +311,31 @@ sTypedValue* BinaryExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generat
         return nullptr;
     }
 
+    if (this->m_op == ",") {
+        // @TODO: type product as expression
+        // @BACK
+        // llvm::Value* val = 
+        // llvm::ArrayRef<llvm::Value*> elements = llvm::makeArrayRef(l->value);
+
+        std::vector<llvm::Type*> types;
+
+        types.push_back(l->type);
+        types.push_back(r->type);
+
+        llvm::StructType* tuple_type = 
+            llvm::StructType::get(*code_generator->m_Context, types);
+        
+        llvm::Value* ptr = code_generator->m_Builder->CreateAlloca(tuple_type);
+        llvm::Value* frst = code_generator->m_Builder->CreateStore(l->value, code_generator->m_Builder->CreateStructGEP(tuple_type, ptr, 0));
+        llvm::Value* scnd = code_generator->m_Builder->CreateStore(r->value, code_generator->m_Builder->CreateStructGEP(tuple_type, ptr, 1));
+
+        // llvm::Value* val = llvm::Value::ConstantFirstVal
+        // Set type as TypeExrAST : l.type <- "*" -> r.type
+        
+        return new sTypedValue(ptr, tuple_type);
+        
+        // return new sTypedValue(ptr, );
+    }
     return build_ir_operation(l, r, this->m_op, code_generator);
 }
 
@@ -341,7 +396,8 @@ llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> c
     // @TODO: Check if can be changed for the new type system
     // llvm::Type* func_return_type = get_llvm_type(this->m_return_type->get_primitive_type(), *code_generator->m_Context);
 
-    llvm::Type* func_return_type = llvm::Type::getInt32Ty(*code_generator->m_Context);
+    // llvm::Type* func_return_type = llvm::Type::getInt32Ty(*code_generator->m_Context);
+    llvm::Type* func_return_type = this->m_return_type->register_type(code_generator);
 
     std::cout << "True return type: " << std::endl;
     this->m_return_type->print();
@@ -370,7 +426,8 @@ llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> c
         arg.setName(this->m_parameters[index]->get_param_name()); 
         std::cout << "Adding parameter: " << std::string(arg.getName()) << std::endl;
         // @TODO: Set arg type
-        code_generator->m_NamedValues[std::string(arg.getName())] = new sTypedValue(&arg, this->m_parameters[index]->m_type_expr.release());
+        // code_generator->m_NamedValues[std::string(arg.getName())] = new sTypedValue(&arg, this->m_parameters[index]->m_type_expr.release());
+        code_generator->m_NamedValues[std::string(arg.getName())] = new sTypedValue(&arg, arg.getType());
         index++;
     }
 
@@ -398,7 +455,18 @@ llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> c
             //     func->eraseFromParent();
             //     return nullptr;
             // }
-            code_generator->m_Builder->CreateRet(value->value);
+
+            func_return_type->print(llvm::errs());
+            std::cout << std::endl;
+            value->type->print(llvm::errs());
+            std::cout << std::endl;
+
+            if (func_return_type->getTypeID() == value->type->getTypeID()) {
+                std::cout << "Type check" << std::endl;
+                code_generator->m_Builder->CreateRet(value->value);
+            } else {
+                DEPLANG_PARSER_ERROR("Type mismatch");
+            }
             break;
         }
         // @TODO: On Error reading function body, remove function
@@ -476,7 +544,9 @@ sTypedValue* CallExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator
         DEPLANG_PARSER_ERROR("Couldn't Build function call");
         return nullptr;
     }
-    return new sTypedValue(val, new TypeExrAST("int"));
+
+    return new sTypedValue(val, llvm::Type::getInt32Ty(*code_generator->m_Context));
+    // return new sTypedValue(val, new TypeExrAST("int"));
 }
 
 void CallExprAST::print() {
@@ -690,6 +760,7 @@ std::unique_ptr<ExprAST> cParser::parse_primary() {
     switch (peeked_token.token_type) {
         case TOK_IDENTIFIER:
             return this->parse_identifier_expr();
+        case TOK_FLOAT:
         case TOK_INTEGER:
             return this->parse_number_expr();
         case TOK_LEFTPAR:
@@ -738,8 +809,6 @@ std::unique_ptr<ExprAST> cParser::parse_binop_expression(int expr_prec, std::uni
         lhs = std::make_unique<BinaryExprAST>(op, std::move(lhs), std::move(rhs));
     }
 }
-
-// @TODO: add parse type
 
 std::unique_ptr<TypeExrAST> cParser::parse_type_expression(int expr_prec, std::unique_ptr<TypeExrAST> lhs) {
     sToken peeked_token;
@@ -918,6 +987,7 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
 
         auto expression = this->parse_expression();
         peeked_token = this->peek_next_token();
+        // std::cout << "PEEEEKED:: " << peeked_token.value << std::endl;
 
         this->get_next_token(); // Consume ';'
         if (!expression) { std::cout << "Got no expression\n"; break; }
@@ -1004,9 +1074,10 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
 }
 
 int cParser::get_binop_precedence(std::string op) {
-    if (op == ">" || op == "<" || op == ">=" || op == "<=") { return 10; }
-    else if (op == "+" || op == "-") { return 20; }
-    else if (op == "*" || op == "/") { return 30; }
+    if (op == ",") { return 10; }
+    else if (op == ">" || op == "<" || op == ">=" || op == "<=") { return 20; }
+    else if (op == "+" || op == "-") { return 30; }
+    else if (op == "*" || op == "/") { return 40; }
     else { return -1; }
 }
 
