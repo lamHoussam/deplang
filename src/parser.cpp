@@ -1,5 +1,7 @@
 #include "../include/parser.h"
+#include <llvm-14/llvm/BinaryFormat/Dwarf.h>
 #include <llvm-14/llvm/Support/raw_ostream.h>
+#include <string>
 
 /**
 * Function call
@@ -24,30 +26,15 @@ cCodeGenerator::cCodeGenerator() {
 
 void cCodeGenerator::delete_named_values() { this->m_NamedValues.clear(); }
 
-llvm::Type* get_llvm_type(const ePrimitiveType& type, llvm::LLVMContext& context) {
-    switch (type) {
-    case TYPE_INT:    return llvm::Type::getInt32Ty(context);
-    case TYPE_BOOL:   return llvm::Type::getInt1Ty(context);
-    case TYPE_FLOAT:  return llvm::Type::getFloatTy(context);
-    case TYPE_EMPTY:  return llvm::Type::getVoidTy(context);
-    default: return nullptr;
-    }
+llvm::Type* get_llvm_type(const std::string& type, std::shared_ptr<cCodeGenerator> code_generator) {
+    // @TODO: Add primitive types to NamedTypes
+
+    if (type == "int") { return llvm::Type::getInt32Ty(*code_generator->m_Context);}
+    else if (type == "float") { return llvm::Type::getFloatTy(*code_generator->m_Context); }
+    else if (type == "bool") { return llvm::Type::getInt1Ty(*code_generator->m_Context); }
+    else if (type == "void") { return llvm::Type::getVoidTy(*code_generator->m_Context); }
+    else { return code_generator->m_NamedTypes[type]; }
 }
-
-std::string get_string_from_prim_type(const ePrimitiveType& type) {
-    switch (type) {
-    case TYPE_INT:        return "INT";
-    case TYPE_BOOL:       return "BOOL";
-    case TYPE_FLOAT:      return "FLOAT";
-    case TYPE_EMPTY:      return "EMPTY";
-    case TYPE_PROD:       return "*";
-    case TYPE_ENUM:       return "|";
-    case TYPE_FUNCTION:   return "->";
-    default:              return "";
-    }
-}
-
-
 
 sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, std::shared_ptr<cCodeGenerator> code_generator) {
     if (!l || !r || !l->value || !r->value) { 
@@ -221,30 +208,20 @@ void VariableExprAST::print() {
 
 
 TypeExrAST::TypeExrAST(const std::string& name, std::unique_ptr<TypeExrAST> lhs, std::unique_ptr<TypeExrAST> rhs) {
-    if (name == "int") { this->m_prim_type = TYPE_INT; }
-    else if (name == "bool") { this->m_prim_type = TYPE_BOOL; }
-    else if (name == "float") { this->m_prim_type = TYPE_FLOAT; }
-    else if (name == "void") { this->m_prim_type = TYPE_EMPTY; }
-    else if (name == "->") { this->m_prim_type = TYPE_FUNCTION; }
-    else if (name == "*") { this->m_prim_type = TYPE_PROD; }
-    else if (name == "|") { this->m_prim_type = TYPE_ENUM; }
-
+    this->m_prim_type = name;
     this->m_left = std::move(lhs);
     this->m_right = std::move(rhs);
 }
 
 TypeExrAST::TypeExrAST(const std::string& name) {
-    if (name == "int") { this->m_prim_type = TYPE_INT; }
-    else if (name == "bool") { this->m_prim_type = TYPE_BOOL; }
-    else if (name == "float") { this->m_prim_type = TYPE_FLOAT; }
-    else if (name == "void") { this->m_prim_type = TYPE_EMPTY; }
-    else { DEPLANG_PARSER_ERROR("Symbol can't be primitive type"); return; }
+    std::cout << "PIRJEARPIAEJRPIAR: " << name << std::endl;
+    this->m_prim_type = name;
 
     this->m_left = nullptr;
     this->m_right = nullptr;
 }
 
-const ePrimitiveType& TypeExrAST::get_primitive_type() { return this->m_prim_type; }
+const std::string& TypeExrAST::get_primitive_type() { return this->m_prim_type; }
 
 sTypedValue* TypeExrAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     // @TODO: Add type code generation
@@ -253,7 +230,7 @@ sTypedValue* TypeExrAST::codegen(std::shared_ptr<cCodeGenerator> code_generator)
 
 llvm::Type* TypeExrAST::register_type(std::shared_ptr<cCodeGenerator> code_generator) {
     
-    llvm::Type* prim_type = get_llvm_type(this->get_primitive_type(), *code_generator->m_Context);
+    llvm::Type* prim_type = get_llvm_type(this->get_primitive_type(), code_generator);
 
     // @TODO: For now only doing product types, implement others later
     if (!prim_type && this->m_left && this->m_right) {
@@ -273,7 +250,7 @@ llvm::Type* TypeExrAST::register_type(std::shared_ptr<cCodeGenerator> code_gener
 }
 
 void TypeExrAST::print() {
-    std::cout << "\t" << get_string_from_prim_type(this->m_prim_type) << std::endl;
+    std::cout << "\t" << this->m_prim_type << std::endl;
     if (this->m_left && this->m_right) {
         std::cout << "\t/\t\t\t\t\\" << std::endl;
         std::cout << "/\t\t\t\t\t\\" << std::endl;
@@ -289,9 +266,9 @@ bool TypeExrAST::type_check(const TypeExrAST* other_type_expr) {
     if (!this->m_left || !this->m_right || !other_type_expr->m_left || !other_type_expr->m_right) {
         return false;
     }
-    if (this->m_prim_type == TYPE_PROD || this->m_prim_type == TYPE_FUNCTION) {
+    if (this->m_prim_type == "*" || this->m_prim_type == "->") {
         return this->m_left->type_check(other_type_expr->m_left.get()) && this->m_right->type_check(other_type_expr->m_right.get());
-    } else if (this->m_prim_type == TYPE_ENUM) {
+    } else if (this->m_prim_type == "|") {
         return (m_left->type_check(other_type_expr->m_left.get()) && m_right->type_check(other_type_expr->m_right.get()))
         || (m_left->type_check(other_type_expr->m_right.get()) && m_right->type_check(other_type_expr->m_left.get()));
     }
@@ -326,8 +303,8 @@ sTypedValue* BinaryExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generat
             llvm::StructType::get(*code_generator->m_Context, types);
         
         llvm::Value* ptr = code_generator->m_Builder->CreateAlloca(tuple_type);
-        llvm::Value* frst = code_generator->m_Builder->CreateStore(l->value, code_generator->m_Builder->CreateStructGEP(tuple_type, ptr, 0));
-        llvm::Value* scnd = code_generator->m_Builder->CreateStore(r->value, code_generator->m_Builder->CreateStructGEP(tuple_type, ptr, 1));
+        code_generator->m_Builder->CreateStore(l->value, code_generator->m_Builder->CreateStructGEP(tuple_type, ptr, 0));
+        code_generator->m_Builder->CreateStore(r->value, code_generator->m_Builder->CreateStructGEP(tuple_type, ptr, 1));
 
         // llvm::Value* val = llvm::Value::ConstantFirstVal
         // Set type as TypeExrAST : l.type <- "*" -> r.type
@@ -370,7 +347,7 @@ void ReturnExprAST::print() {
 FunctionParameterAST::FunctionParameterAST(const std::string& param_name, std::unique_ptr<TypeExrAST> param_type): m_type_expr(std::move(param_type)), m_param_name(param_name) {}
 
 const std::string& FunctionParameterAST::get_param_name() { return m_param_name; }
-const ePrimitiveType& FunctionParameterAST::get_primitive_type() { return m_type_expr->get_primitive_type(); }
+const std::string& FunctionParameterAST::get_primitive_type() { return m_type_expr->get_primitive_type(); }
 
 
 // Functio ndefinition AST
@@ -385,7 +362,7 @@ llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> c
 
     std::vector<llvm::Type*> param_types;
     for (auto& param : this->m_parameters) {
-        param_types.push_back(get_llvm_type(param->get_primitive_type(), *code_generator->m_Context));
+        param_types.push_back(get_llvm_type(param->get_primitive_type(), code_generator));
     }
 
     // std::vector<std::shared_ptr<llvm::Type>> doubles(this->m_parameters.size(),
@@ -449,23 +426,19 @@ llvm::Function* FunctionDefinitionAST::codegen(std::shared_ptr<cCodeGenerator> c
             return nullptr;
         }
         if (dynamic_cast<ReturnExprAST*>(expr.get())) {
-            // @TODO: Bring back
-            // if (value->type->get_primitive_type() != this->m_return_type->get_primitive_type()) {
-            //     DEPLANG_PARSER_ERROR("Expression type different from function return type for function " << this->m_function_name);
-            //     func->eraseFromParent();
-            //     return nullptr;
-            // }
+            // func_return_type->print(llvm::errs());
+            // std::cout << std::endl;
+            // value->type->print(llvm::errs());
+            // std::cout << std::endl;
 
-            func_return_type->print(llvm::errs());
-            std::cout << std::endl;
-            value->type->print(llvm::errs());
-            std::cout << std::endl;
-
+            // @TODO: Better type checking
             if (func_return_type->getTypeID() == value->type->getTypeID()) {
                 std::cout << "Type check" << std::endl;
                 code_generator->m_Builder->CreateRet(value->value);
             } else {
                 DEPLANG_PARSER_ERROR("Type mismatch");
+                func->eraseFromParent();
+                return nullptr;
             }
             break;
         }
@@ -492,7 +465,7 @@ VariableDeclarationExprAST::VariableDeclarationExprAST(const std::string& variab
 VariableDeclarationExprAST::VariableDeclarationExprAST(const std::string& variable_name, std::unique_ptr<TypeExrAST> variable_type, std::unique_ptr<ExprAST> expression) : m_variable_name(variable_name), m_variable_type(std::move(variable_type)), m_expression(std::move(expression)) {}
 
 const std::string& VariableDeclarationExprAST::get_variable_name() { return m_variable_name; }
-const ePrimitiveType& VariableDeclarationExprAST::get_primitive_type() { return m_variable_type->get_primitive_type(); }
+const std::string& VariableDeclarationExprAST::get_primitive_type() { return m_variable_type->get_primitive_type(); }
 
 sTypedValue* VariableDeclarationExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
     sTypedValue* value;
@@ -581,6 +554,20 @@ void AssignmentExprAST::print() {
 
     // m_variable_type->print();
     std::cout << std::endl;
+}
+
+
+
+TypeDeclarationExprAST::TypeDeclarationExprAST(const std::string& type_name, std::unique_ptr<TypeExrAST> type_def) : m_type_name(type_name), m_type_definition(std::move(type_def)) {
+
+}
+
+llvm::Type* TypeDeclarationExprAST::codegen(std::shared_ptr<cCodeGenerator> code_generator) {
+    llvm::Type* expr_type = this->m_type_definition->register_type(code_generator);
+
+    std::cout << "Added Named Type" << std::endl;
+    code_generator->m_NamedTypes[this->m_type_name] = expr_type;
+    return expr_type;
 }
 
 
@@ -785,6 +772,38 @@ std::unique_ptr<TypeExrAST> cParser::parse_type() {
     return nullptr;
 }
 
+std::unique_ptr<TypeDeclarationExprAST> cParser::parse_type_declaration() {
+    this->get_next_token(); // Consume 'type'
+    sToken peeked = this->peek_next_token();
+    if (peeked.token_type != TOK_IDENTIFIER) {
+        DEPLANG_PARSER_ERROR("Expected identifier, got " << peeked.value << " at line " << peeked.line_number);
+        return nullptr;
+    }
+
+    this->get_next_token(); // Consume identifier
+    std::string type_name = peeked.value;
+
+    peeked = this->peek_next_token();
+    if (peeked.token_type != TOK_EQUAL) {
+        DEPLANG_PARSER_ERROR("Expected '=', got " << peeked.value << " at line " << peeked.line_number);
+        return nullptr;
+    }
+    this->get_next_token(); // Consume '='
+
+    std::unique_ptr<TypeExrAST> lhs = this->parse_type();
+    std::unique_ptr<TypeExrAST> type_expr;
+    if (lhs) {
+        std::cout << "Type: " << lhs->get_primitive_type() << std::endl;
+        type_expr = this->parse_type_expression(0, std::move(lhs));
+    } else {
+        type_expr = std::make_unique<TypeExrAST>("void");
+    }
+
+    if (!type_expr) { return nullptr; }
+
+    return std::make_unique<TypeDeclarationExprAST>(type_name, std::move(type_expr));
+}
+
 std::unique_ptr<ExprAST> cParser::parse_binop_expression(int expr_prec, std::unique_ptr<ExprAST> lhs) {
     sToken peeked_token;
 
@@ -963,7 +982,7 @@ std::unique_ptr<FunctionDefinitionAST> cParser::parse_function_definition() {
         std::cout << "Parsing type "<< std::endl;
         auto lhs = this->parse_type();
         if (lhs) {
-            std::cout << "Type: " << get_string_from_prim_type(lhs->get_primitive_type()) << std::endl;
+            std::cout << "Type: " << lhs->get_primitive_type() << std::endl;
             return_type_expr = this->parse_type_expression(0, std::move(lhs));
         } else {
             return_type_expr = std::make_unique<TypeExrAST>("void");
@@ -1043,7 +1062,6 @@ std::unique_ptr<VariableDeclarationExprAST> cParser::parse_variable_declaration(
     std::cout << "Parsing type "<< std::endl;
     auto lhs = this->parse_type();
     if (lhs) {
-        std::cout << "Type: " << get_string_from_prim_type(lhs->get_primitive_type()) << std::endl;
         return_type_expr = this->parse_type_expression(0, std::move(lhs));
         if (!return_type_expr) { return nullptr; }
         return_type_expr->print();
@@ -1092,6 +1110,7 @@ void cParser::parse() {
     // this->m_current_token = this->m_tokens[0];
     
     llvm::Function* f;
+
     while (true) {
         // this->get_next_token();
         
@@ -1099,17 +1118,26 @@ void cParser::parse() {
         std::string type = get_token_type_string(peeked.token_type);
         // this->get_next_token();
         // continue;
-        switch (peeked.token_type) {
-        default:
-            return;
-        case TOK_EOF:
-            std::cout << "Found EOF" << std::endl;
-            return;
-        case TOK_SEMICOLON:
-            this->get_next_token();
-            break;
-        case TOK_DEF:
-            auto func_def = this->parse_function_definition();
+    
+        if (peeked.token_type == TOK_EOF) { std::cout << "Found EOF" << std::endl; return ; }
+        else if (peeked.token_type == TOK_SEMICOLON) { this->get_next_token(); }
+        else if (peeked.token_type == TOK_TYPEDECL) {
+            std::unique_ptr<TypeDeclarationExprAST> type_decl = this->parse_type_declaration();
+            if (!type_decl) {
+                DEPLANG_PARSER_ERROR("ERROR");
+                return;
+            }
+
+            peeked = this->peek_next_token(); // Consume ';'
+            if (peeked.token_type != TOK_SEMICOLON) {
+                DEPLANG_PARSER_ERROR("Expected ';', got " << peeked.value);
+                return;
+            }
+
+            type_decl->codegen(this->m_code_generator);
+
+        } else if (peeked.token_type == TOK_DEF) {
+            std::unique_ptr<FunctionDefinitionAST> func_def = this->parse_function_definition();
             if (!func_def) {
                 DEPLANG_PARSER_ERROR("ERROR");
                 return;
@@ -1119,7 +1147,9 @@ void cParser::parse() {
             // std::cout << "END AST:" << std::endl; 
             f = func_def->codegen(this->m_code_generator);
             f->print(llvm::errs());
-            break;
+        } else {
+            DEPLANG_PARSER_ERROR("ERROR");
+            return;
         }
     }
 }

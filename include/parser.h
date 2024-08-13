@@ -46,21 +46,6 @@
 struct sTypedValue;
 
 
-// Types
-enum ePrimitiveType {
-    TYPE_INT,
-    TYPE_BOOL,
-    TYPE_FLOAT,
-    TYPE_EMPTY,
-    TYPE_PROD,
-    TYPE_ENUM,
-    TYPE_FUNCTION,
-};
-
-inline llvm::Type* get_llvm_type(const ePrimitiveType& type, llvm::LLVMContext& context);
-
-
-
 class cCodeGenerator {
 public:
     cCodeGenerator();
@@ -70,6 +55,7 @@ public:
 
     std::unique_ptr<llvm::Module> m_Module;
     std::map<std::string, sTypedValue*> m_NamedValues;
+    std::map<std::string, llvm::Type*> m_NamedTypes;
 
     void delete_named_values();
     ~cCodeGenerator() = default;
@@ -77,6 +63,8 @@ public:
     // ~cCodeGenerator() = default;
 private:
 };
+
+inline llvm::Type* get_llvm_type(const std::string& type, std::shared_ptr<cCodeGenerator> code_generator);
 
 // @TODO: Implement
 sTypedValue* build_ir_operation(sTypedValue* l, sTypedValue* r, std::string op, std::shared_ptr<cCodeGenerator> code_generator);
@@ -109,6 +97,7 @@ class LiteralFloatExprAST : public ExprAST {
 public:
     LiteralFloatExprAST(const std::string& value) : m_value(std::stof(value)) {}
     inline const float get_value() { return m_value; }
+    std::unique_ptr<ExprAST> parse_type_expr();
 
     sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
     void print() override;
@@ -146,7 +135,7 @@ public:
     TypeExrAST(const std::string& name);
 
     // @TODO: Change to real type
-    const ePrimitiveType& get_primitive_type();
+    const std::string& get_primitive_type();
     sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
 
     llvm::Type* register_type(std::shared_ptr<cCodeGenerator> code_generator);
@@ -154,7 +143,7 @@ public:
 
     bool type_check(const TypeExrAST* other_type_expr);
 private:
-    ePrimitiveType m_prim_type;
+    std::string m_prim_type;
     std::unique_ptr<TypeExrAST> m_left, m_right;
 };
 
@@ -186,7 +175,7 @@ public:
     inline const std::string& get_param_name();
     
     // @TODO: Change type
-    inline const ePrimitiveType& get_primitive_type();
+    inline const std::string& get_primitive_type();
     std::unique_ptr<TypeExrAST> m_type_expr;
 
 private:
@@ -224,7 +213,7 @@ public:
     inline const std::string& get_variable_name();
 
     // @TODO: Change type
-    inline const ePrimitiveType& get_primitive_type();
+    inline const std::string& get_primitive_type();
 
     sTypedValue* codegen(std::shared_ptr<cCodeGenerator> code_generator) override;
     void print() override;
@@ -264,6 +253,18 @@ private:
     std::unique_ptr<ExprAST> m_rhs;
 };
 
+// Custom type declaration
+// type identifier '=' type_expr
+class TypeDeclarationExprAST {
+public:
+    TypeDeclarationExprAST(const std::string& type_name, std::unique_ptr<TypeExrAST> type_def);
+
+    llvm::Type* codegen(std::shared_ptr<cCodeGenerator> code_generator);
+private:
+    std::string m_type_name;
+    std::unique_ptr<TypeExrAST> m_type_definition;
+};
+
 
 struct sTypedValue {
     llvm::Value* value;
@@ -290,7 +291,8 @@ public:
     std::unique_ptr<ExprAST> parse_identifier_expr();
     std::unique_ptr<ExprAST> parse_primary();
     std::unique_ptr<TypeExrAST> parse_type();
-    
+    std::unique_ptr<TypeDeclarationExprAST> parse_type_declaration();
+
     std::unique_ptr<ReturnExprAST> parse_return_expr();
 
     std::unique_ptr<ExprAST> parse_binop_expression(int expr_prec, std::unique_ptr<ExprAST> lhs);
